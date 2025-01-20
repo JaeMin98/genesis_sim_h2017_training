@@ -1,3 +1,8 @@
+wandb/
+training_results/
+optimization_results/
+complete_test_report_*.txt
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
