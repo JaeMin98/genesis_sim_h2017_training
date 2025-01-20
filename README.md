@@ -87,14 +87,11 @@ print(torch.backends.cudnn.version())
 
 ## Basic Installation
 
-1. Install PyTorch following the [official instructions](https://pytorch.org)
-2. Install Genesis:
+   Install Genesis:
    ```bash
    pip install genesis-world
    ```
-
-**Note**: If using CUDA, ensure appropriate nvidia-driver is installed.
-
+   
 ## Motion Planning
 Genesis includes OMPL motion planning functionalities with an intuitive API:
 1. [Download pre-compiled OMPL wheel](https://github.com/ompl/ompl/releases/tag/prerelease)
