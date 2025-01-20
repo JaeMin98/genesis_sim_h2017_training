@@ -1,56 +1,15 @@
 import os
-import random
 import torch
-import numpy as np
-from datetime import datetime
-from stable_baselines3 import PPO, SAC, TD3
+from stable_baselines3 import SAC
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import configure
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
-from stable_baselines3.common.noise import NormalActionNoise
 import wandb
 from wandb.integration.sb3 import WandbCallback
 
+from utils import get_random_name
 from GenesisEnv import Genesis_Simulator
 
-# 형용사와 명사 리스트 정의
-# 1. 형용사 100개
-random_adjectives = [
-    "ancient", "breezy", "crimson", "dazzling", "electric", "epic", "ethereal", "flawless", "frosty", "golden",
-    "hidden", "icy", "jagged", "keen", "limitless", "mighty", "mystic", "noble", "ominous", "pristine",
-    "quiet", "radiant", "shimmering", "silent", "sparkling", "surreal", "timeless", "tranquil", "twinkling", "unseen",
-    "vibrant", "whispering", "wondrous", "zealous", "boundless", "cosmic", "divine", "evergreen", "flowing", "gleaming",
-    "harmonic", "illusive", "jubilant", "kaleidoscopic", "luminescent", "majestic", "nebulous", "opulent", "polar", "quivering",
-    "roaring", "soaring", "tremendous", "undying", "velvety", "wandering", "xenial", "yearning", "zesty", "amaranthine",
-    "bewitching", "cascading", "dreamy", "enigmatic", "foreboding", "glimmering", "haunting", "iridescent", "joyous", "karmic",
-    "mesmerizing", "nocturnal", "oceanic", "prismatic", "quintessential", "rustic", "sapphire", "tempestuous", "ultraviolet", "verdant",
-    "whimsical", "xanthic", "yonder", "zephyrous", "astral", "blissful", "celestial", "daring", "euphoric", "fiery",
-    "galactic", "heavenly", "incandescent", "jovial", "kinetic", "lunar", "magnetic", "nascent", "orbital", "paradoxical",
-    "quantum", "resplendent", "stellar", "tidal", "universal", "vortex", "wild", "xeric", "youthful", "glorious"
-]
-
-# 2. 명사 100개
-random_nouns = [
-    "abyss", "arcade", "bard", "blossom", "canyon", "citadel", "cradle", "dawn", "eden", "fabric",
-    "fable", "garrison", "gazebo", "glade", "grotto", "haven", "horizon", "jungle", "labyrinth", "lagoon",
-    "meadow", "mirage", "nebula", "oasis", "panorama", "paradise", "pinnacle", "quarry", "realm", "reef",
-    "riverbank", "sanctum", "silhouette", "skyline", "symphony", "tavern", "temple", "tundra", "utopia", "vacuum",
-    "village", "voyage", "waterfall", "wilderness", "xenolith", "yard", "yonderland", "zenith", "azure", "bastion",
-    "chamber", "cosmos", "delta", "enclave", "equinox", "festival", "fjord", "forge", "galaxy", "gallery",
-    "gateway", "gorge", "grove", "harbor", "hearth", "hive", "inlet", "island", "junction", "kiln",
-    "lab", "library", "mansion", "market", "marshland", "mine", "monolith", "monument", "observatory", "opera",
-    "orchard", "outpost", "pavilion", "plateau", "portal", "prism", "quagmire", "rainforest", "rapids", "rift",
-    "sanctuary", "sculpture", "shipyard", "shrine", "solstice", "spire", "spring", "stronghold", "terrain", "throne",
-    "trench", "underworld", "volcano", "waterway", "workshop", "ziggurat", "castle", "glacier", "sands", "shipwreck"
-]
-
-def get_random_name():
-    """'YYYYMMDD-형용사+명사' 형태의 문자열 생성"""
-    date_str = datetime.now().strftime("%Y%m%d")
-    adjective = random.choice(random_adjectives)
-    noun = random.choice(random_nouns)
-    return f"{date_str}-{adjective}{noun}"
 
 class SaveModelEveryNEpisodesCallback(BaseCallback):
     """지정된 에피소드마다 모델을 저장하고 W&B에 업로드하는 콜백"""
@@ -114,10 +73,9 @@ def setup_wandb(config, random_name):
 Is_Genesis_initialized = False
 env = Genesis_Simulator(render=False)
 env = Monitor(env)
-# env = DummyVecEnv([lambda: env])
-# env = VecNormalize(env, norm_obs=True, norm_reward=True)
+
 def train_genesis(
-    algorithm="PPO",
+    algorithm="SAC",
     total_timesteps=30_000_000,
     seed=42,
     num_envs=1,  # Genesis는 1개 환경만 사용
@@ -125,7 +83,7 @@ def train_genesis(
     batch_size=1024,
     n_epochs=10,
     gamma=0.97,
-    buffer_size=1_000_000,
+    buffer_size=30_000_000,
     learning_starts=2048,
     train_freq=10,
     gradient_steps=8,
@@ -173,22 +131,8 @@ def train_genesis(
     os.makedirs(log_path, exist_ok=True)
     new_logger = configure(log_path, ["stdout", "csv", "tensorboard"])
 
-    # 알고리즘별 설정
-    if algorithm == "PPO":
-        model = PPO(
-            "MlpPolicy",
-            env,
-            learning_rate=learning_rate,
-            n_steps=2048,
-            batch_size=batch_size,
-            n_epochs=n_epochs,
-            gamma=gamma,
-            policy_kwargs={"net_arch": [64, 64]},
-            tensorboard_log=os.path.join(save_path, "tensorboard"),
-            device=device,
-            verbose=1,
-        )
-    elif algorithm == "SAC":
+
+    if algorithm == "SAC":
         model = SAC(
             "MlpPolicy",
             env,
