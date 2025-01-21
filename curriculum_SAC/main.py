@@ -13,7 +13,6 @@ from utils import get_random_name
 from GenesisEnv_CL import Genesis_Simulator
 
 class CustomLoggingCallback(BaseCallback):
-    """에피소드마다 로깅을 처리하는 통합 콜백"""
     def __init__(
         self, 
         save_freq: int, 
@@ -23,13 +22,13 @@ class CustomLoggingCallback(BaseCallback):
         verbose=0
     ):
         super().__init__(verbose)
-        # 모델 저장 관련 설정
+        # Model saving settings
         self.save_freq = save_freq
         self.save_path = save_path
         self.prefix_name = prefix_name
         self.run = wandb_run
         
-        # 에피소드 추적
+        # Episode tracking
         self.episode_count = 0
         self.training_start_time = None
         self.episode_rewards = []
@@ -37,35 +36,64 @@ class CustomLoggingCallback(BaseCallback):
         self.current_episode_reward = 0
         self.current_episode_steps = 0
         
-        # Success rate 추적
-        self.success_history = []  # 성공 여부 저장
-        self.success_window = 100  # success rate 계산을 위한 윈도우 크기
+        # Success rate tracking
+        self.success_history = []
+        self.success_window = 100
         
-        # Loss 추적용 변수들
+        # Loss tracking
         self.last_actor_loss = None
         self.last_critic_loss = None
         self.last_ent_coef = None
         
-        # UOC 추적
+        # UOC tracking
         self.last_uoc = None
-        self.uoc_success_counts = {}  # 각 UOC별 성공 횟수
-        self.uoc_total_counts = {}    # 각 UOC별 총 시도 횟수
+        self.uoc_success_counts = {}
+        self.uoc_total_counts = {}
 
-        # CSV 로깅을 위한 추가 초기화
+        # CSV logging setup
         self.log_path = os.path.join(self.save_path, "logs")
         if not os.path.exists(self.log_path):
             os.makedirs(self.log_path)
             
-        # CSV 파일 경로 설정
+        # CSV file paths setup
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.metrics_csv_path = os.path.join(self.log_path, f"metrics_{timestamp}.csv")
         self.curriculum_csv_path = os.path.join(self.log_path, f"curriculum_{timestamp}.csv")
         
-        # CSV 헤더 작성
+        # Write CSV headers
         self.write_csv_headers()
 
+        # Create save directory if it doesn't exist
         if not os.path.exists(self.save_path):
             os.makedirs(self.save_path)
+
+    def _save_model(self):
+        """Save the model and optionally upload to wandb"""
+        try:
+            # Create filename with episode number
+            filename = f"{self.prefix_name}_episode_{self.episode_count}.zip"
+            path = os.path.join(self.save_path, filename)
+            
+            # Save the model
+            self.model.save(path)
+            
+            if self.verbose > 0:
+                print(f"Saved model to {path}")
+            
+            # If wandb is enabled, log the model as an artifact
+            if self.run is not None:
+                artifact = wandb.Artifact(
+                    name=f"{self.prefix_name}_episode_{self.episode_count}",
+                    type="model"
+                )
+                artifact.add_file(path)
+                self.run.log_artifact(artifact)
+                
+                if self.verbose > 0:
+                    print(f"Uploaded model to wandb as artifact")
+                    
+        except Exception as e:
+            print(f"Error saving model: {e}")
             
     def write_csv_headers(self):
         """CSV 파일 헤더 작성"""
@@ -143,7 +171,7 @@ class CustomLoggingCallback(BaseCallback):
         self.training_start_time = time.time()
 
     def _reset_replay_buffer(self, current_uoc):
-        """리플레이 버퍼 초기화"""
+        """리플레이 버퍼 초기화 (2000개 샘플 유지)"""
         try:
             replay_buffer = self.locals["replay_buffer"]
             # 버퍼 크기와 설정 저장
@@ -153,7 +181,7 @@ class CustomLoggingCallback(BaseCallback):
             device = replay_buffer.device
             n_envs = replay_buffer.n_envs
             
-            # 새로운 버퍼로 교체
+            # 새로운 버퍼 생성
             from stable_baselines3.common.buffers import ReplayBuffer
             new_buffer = ReplayBuffer(
                 buffer_size,
@@ -163,15 +191,43 @@ class CustomLoggingCallback(BaseCallback):
                 n_envs=n_envs
             )
             
+            # 이전 버퍼에서 2000개의 샘플 유지
+            if replay_buffer.size() > 2000:
+                # 마지막 2000개의 샘플 인덱스 계산
+                current_pos = replay_buffer.pos
+                if current_pos >= 2000:
+                    start_idx = current_pos - 2000
+                    indices = np.arange(start_idx, current_pos)
+                else:
+                    # 버퍼가 순환된 경우
+                    indices = np.concatenate([
+                        np.arange(buffer_size - (2000 - current_pos), buffer_size),
+                        np.arange(0, current_pos)
+                    ])
+                
+                # 선택된 샘플들을 새 버퍼로 복사
+                for idx in indices:
+                    new_buffer.add(
+                        replay_buffer.observations[idx],
+                        replay_buffer.next_observations[idx],
+                        replay_buffer.actions[idx],
+                        replay_buffer.rewards[idx],
+                        replay_buffer.dones[idx],
+                        infos=[{}]  # 기본 info 딕셔너리
+                    )
+                    
             # 모델의 버퍼 교체
             self.model.replay_buffer = new_buffer
+            
             if self.verbose > 0:
                 print(f"[Callback] Reset replay buffer - UOC changed from {self.last_uoc} to {current_uoc}")
+                print(f"[Callback] Kept {min(2000, replay_buffer.size())} samples from previous buffer")
                 
             # wandb에 리셋 이벤트 로깅
             if self.run is not None:
                 wandb.log({
                     "replay_buffer/reset_episode": self.episode_count,
+                    "replay_buffer/kept_samples": min(2000, replay_buffer.size())
                 })
                 
         except Exception as e:
