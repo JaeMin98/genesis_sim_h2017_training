@@ -1,52 +1,307 @@
 import os
+import time
 import torch
+import pandas as pd
 from stable_baselines3 import SAC
 from stable_baselines3.common.callbacks import BaseCallback
-from stable_baselines3.common.logger import configure
 from stable_baselines3.common.monitor import Monitor
 import wandb
-from wandb.integration.sb3 import WandbCallback
+import numpy as np
+from datetime import datetime
 
 from utils import get_random_name
-from GenesisEnv import Genesis_Simulator
+from GenesisEnv_CL import Genesis_Simulator
 
-
-class SaveModelEveryNEpisodesCallback(BaseCallback):
-    """지정된 에피소드마다 모델을 저장하고 W&B에 업로드하는 콜백"""
-    def __init__(self, n_episodes: int, save_path: str, prefix_name: str, wandb_run=None, verbose=0):
-        super(SaveModelEveryNEpisodesCallback, self).__init__(verbose)
-        self.n_episodes = n_episodes
+class CustomLoggingCallback(BaseCallback):
+    """에피소드마다 로깅을 처리하는 통합 콜백"""
+    def __init__(
+        self, 
+        save_freq: int, 
+        save_path: str, 
+        prefix_name: str, 
+        wandb_run=None, 
+        verbose=0
+    ):
+        super().__init__(verbose)
+        # 모델 저장 관련 설정
+        self.save_freq = save_freq
         self.save_path = save_path
         self.prefix_name = prefix_name
         self.run = wandb_run
+        
+        # 에피소드 추적
         self.episode_count = 0
+        self.training_start_time = None
+        self.episode_rewards = []
+        self.episode_lengths = []
+        self.current_episode_reward = 0
+        self.current_episode_steps = 0
+        
+        # Success rate 추적
+        self.success_history = []  # 성공 여부 저장
+        self.success_window = 100  # success rate 계산을 위한 윈도우 크기
+        
+        # Loss 추적용 변수들
+        self.last_actor_loss = None
+        self.last_critic_loss = None
+        self.last_ent_coef = None
+        
+        # UOC 추적
+        self.last_uoc = None
+        self.uoc_success_counts = {}  # 각 UOC별 성공 횟수
+        self.uoc_total_counts = {}    # 각 UOC별 총 시도 횟수
+
+        # CSV 로깅을 위한 추가 초기화
+        self.log_path = os.path.join(self.save_path, "logs")
+        if not os.path.exists(self.log_path):
+            os.makedirs(self.log_path)
+            
+        # CSV 파일 경로 설정
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.metrics_csv_path = os.path.join(self.log_path, f"metrics_{timestamp}.csv")
+        self.curriculum_csv_path = os.path.join(self.log_path, f"curriculum_{timestamp}.csv")
+        
+        # CSV 헤더 작성
+        self.write_csv_headers()
 
         if not os.path.exists(self.save_path):
             os.makedirs(self.save_path)
+            
+    def write_csv_headers(self):
+        """CSV 파일 헤더 작성"""
+        # 메트릭스 CSV 헤더
+        metrics_headers = [
+            "timestamp",
+            "episode",
+            "total_timesteps",
+            "fps",
+            "episode_reward",
+            "episode_length",
+            "episode_reward_mean",
+            "episode_length_mean",
+            "success_rate",
+            "replay_buffer_size",
+            "replay_buffer_usage",
+            "actor_loss",
+            "critic_loss",
+            "ent_coef"
+        ]
+        
+        # 커리큘럼 CSV 헤더
+        curriculum_headers = [
+            "timestamp",
+            "episode",
+            "current_uoc"
+        ] + [f"uoc_{i+1}_success_rate" for i in range(8)]  # 최대 10개 UOC 가정
+        
+        # CSV 파일 생성 및 헤더 작성
+        pd.DataFrame(columns=metrics_headers).to_csv(self.metrics_csv_path, index=False)
+        pd.DataFrame(columns=curriculum_headers).to_csv(self.curriculum_csv_path, index=False)
+
+    def log_to_csv(self, metrics, curriculum_data=None):
+        """메트릭스를 CSV 파일에 저장"""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # 메트릭스 데이터 준비
+        metrics_data = {
+            "timestamp": timestamp,
+            "episode": self.episode_count,
+            "total_timesteps": metrics.get("time/total_timesteps", 0),
+            "fps": metrics.get("time/fps", 0),
+            "episode_reward": metrics.get("rollout/episode_reward", 0),
+            "episode_length": metrics.get("rollout/episode_length", 0),
+            "episode_reward_mean": metrics.get("rollout/episode_reward_mean", 0),
+            "episode_length_mean": metrics.get("rollout/episode_length_mean", 0),
+            "success_rate": metrics.get("rollout/success_rate", 0),
+            "replay_buffer_size": metrics.get("replay_buffer/size", 0),
+            "replay_buffer_usage": metrics.get("replay_buffer/usage_percent", 0),
+            "actor_loss": metrics.get("train/actor_loss", None),
+            "critic_loss": metrics.get("train/critic_loss", None),
+            "ent_coef": metrics.get("train/ent_coef", None)
+        }
+        
+        # 메트릭스 CSV에 추가
+        pd.DataFrame([metrics_data]).to_csv(self.metrics_csv_path, mode='a', header=False, index=False)
+        
+        # 커리큘럼 데이터가 있는 경우 저장
+        if curriculum_data is not None:
+            curriculum_row = {
+                "timestamp": timestamp,
+                "episode": self.episode_count,
+                "current_uoc": curriculum_data.get("current_uoc", 0)
+            }
+            
+            # 각 UOC의 성공률 추가
+            success_rates = curriculum_data.get("all_uocs_success_rate", [])
+            for i, rate in enumerate(success_rates):
+                curriculum_row[f"uoc_{i+1}_success_rate"] = rate
+                
+            # 커리큘럼 CSV에 추가
+            pd.DataFrame([curriculum_row]).to_csv(self.curriculum_csv_path, mode='a', header=False, index=False)
+            
+    def _on_training_start(self):
+        self.training_start_time = time.time()
+
+    def _reset_replay_buffer(self, current_uoc):
+        """리플레이 버퍼 초기화"""
+        try:
+            replay_buffer = self.locals["replay_buffer"]
+            # 버퍼 크기와 설정 저장
+            buffer_size = replay_buffer.buffer_size
+            observation_space = replay_buffer.observation_space
+            action_space = replay_buffer.action_space
+            device = replay_buffer.device
+            n_envs = replay_buffer.n_envs
+            
+            # 새로운 버퍼로 교체
+            from stable_baselines3.common.buffers import ReplayBuffer
+            new_buffer = ReplayBuffer(
+                buffer_size,
+                observation_space,
+                action_space,
+                device,
+                n_envs=n_envs
+            )
+            
+            # 모델의 버퍼 교체
+            self.model.replay_buffer = new_buffer
+            if self.verbose > 0:
+                print(f"[Callback] Reset replay buffer - UOC changed from {self.last_uoc} to {current_uoc}")
+                
+            # wandb에 리셋 이벤트 로깅
+            if self.run is not None:
+                wandb.log({
+                    "replay_buffer/reset_episode": self.episode_count,
+                })
+                
+        except Exception as e:
+            print(f"[Callback] Error resetting replay buffer: {e}")
+
+    def _update_success_rate(self, is_success: bool, current_uoc: int = None):
+        """성공률 업데이트"""
+        # 전체 성공률 업데이트
+        self.success_history.append(int(is_success))
+        if len(self.success_history) > self.success_window:
+            self.success_history.pop(0)
+            
+        # UOC별 성공률 업데이트
+        if current_uoc is not None:
+            if current_uoc not in self.uoc_success_counts:
+                self.uoc_success_counts[current_uoc] = 0
+                self.uoc_total_counts[current_uoc] = 0
+            
+            self.uoc_total_counts[current_uoc] += 1
+            if is_success:
+                self.uoc_success_counts[current_uoc] += 1
+
+    def _get_success_rates(self):
+        # 전체 성공률
+        overall_rate = np.mean(self.success_history) * 100 if self.success_history else 0
+        return overall_rate
 
     def _on_step(self) -> bool:
+        # 현재 스텝의 보상과 길이 누적
+        self.current_episode_reward += self.locals["rewards"][0]
+        self.current_episode_steps += 1
+
+        # Loss 값 추적
+        try:
+            sac_model = self.locals["self"]
+            if hasattr(sac_model, '_n_updates') and sac_model._n_updates > 0:
+                if hasattr(sac_model, 'logger') and hasattr(sac_model.logger, 'name_to_value'):
+                    logs = sac_model.logger.name_to_value
+                    if 'train/actor_loss' in logs:
+                        self.last_actor_loss = logs['train/actor_loss']
+                    if 'train/critic_loss' in logs:
+                        self.last_critic_loss = logs['train/critic_loss']
+                    if 'train/ent_coef' in logs:
+                        self.last_ent_coef = logs['train/ent_coef']
+        except Exception as e:
+            print(f"Error tracking losses: {e}")
+
+        # info 딕셔너리에서 정보 추출
         infos = self.locals["infos"]
         for info in infos:
             if "episode" in info:
                 self.episode_count += 1
-                if self.episode_count % self.n_episodes == 0:
-                    # 로컬에 모델 저장
-                    filename = os.path.join(
-                        self.save_path,
-                        f"{self.prefix_name}_ep{self.episode_count}.tar"
-                    )
-                    self.model.save(filename)
-                    if self.verbose > 0:
-                        print(f"[Callback] Model saved to {filename}")
+                
+                # Success 정보 업데이트
+                is_success = info.get("is_success", False)
+                current_uoc = info.get("current_uoc")
+                self._update_success_rate(is_success, current_uoc)
+                
+                # Replay buffer 정보
+                replay_buffer = self.locals["replay_buffer"]
+                current_size = replay_buffer.size()
+                max_size = replay_buffer.buffer_size
+                memory_usage = current_size / max_size * 100
+                
+                # UOC 변경 체크 및 버퍼 초기화
+                if current_uoc is not None and current_uoc != self.last_uoc:
+                    if self.last_uoc is not None:
+                        self._reset_replay_buffer(current_uoc)
+                    self.last_uoc = current_uoc
+                
+                # 학습 시간 계산
+                training_time = time.time() - self.training_start_time
+                
+                # 에피소드 메트릭 저장
+                self.episode_rewards.append(self.current_episode_reward)
+                self.episode_lengths.append(self.current_episode_steps)
+                recent_mean_reward = np.mean(self.episode_rewards[-100:])
+                
+                # 성공률 계산
+                overall_success_rate = self._get_success_rates()
+                
+                # 메트릭스 준비
+                metrics = {
+                    "rollout/episode_reward": self.current_episode_reward,
+                    "rollout/episode_length": self.current_episode_steps,
+                    "rollout/episode_reward_mean": recent_mean_reward,
+                    "rollout/episode_length_mean": np.mean(self.episode_lengths[-100:]),
+                    "rollout/success_rate": overall_success_rate,
+                    "time/total_timesteps": self.num_timesteps,
+                    "time/fps": int(self.num_timesteps / (training_time + 1e-8)),
+                    "replay_buffer/size": current_size,
+                    "replay_buffer/usage_percent": memory_usage,
+                }
 
-                    # W&B에 모델 업로드
-                    if self.run is not None:
-                        artifact_name = f"{self.prefix_name}_ep{self.episode_count}"
-                        artifact = wandb.Artifact(name=artifact_name, type="model")
-                        artifact.add_file(filename)
-                        self.run.log_artifact(artifact)
-                        if self.verbose > 0:
-                            print(f"[Callback] Model artifact uploaded to W&B: {artifact_name}")
+                # Loss 메트릭 추가
+                if self.last_actor_loss is not None:
+                    metrics["train/actor_loss"] = self.last_actor_loss
+                if self.last_critic_loss is not None:
+                    metrics["train/critic_loss"] = self.last_critic_loss
+                if self.last_ent_coef is not None:
+                    metrics["train/ent_coef"] = self.last_ent_coef
+
+                # 커리큘럼 데이터 준비
+                curriculum_data = None
+                if "current_uoc" in info and "all_uocs_success_rate" in info:
+                    curriculum_data = {
+                        "current_uoc": current_uoc,
+                        "all_uocs_success_rate": info["all_uocs_success_rate"]
+                    }
+
+                # CSV 파일에 로깅
+                self.log_to_csv(metrics, curriculum_data)
+
+                # wandb에 로깅
+                if self.run is not None:
+                    wandb.log(metrics)
+                    if curriculum_data:
+                        for i, rate in enumerate(curriculum_data["all_uocs_success_rate"]):
+                            metrics[f"curriculum/uoc_{i+1}_success_rate"] = rate
+                        metrics["curriculum/current_uoc"] = current_uoc
+                        wandb.log(metrics)
+                
+                # 주기적인 모델 저장
+                if self.episode_count % self.save_freq == 0:
+                    self._save_model()
+                
+                # 다음 에피소드를 위한 초기화
+                self.current_episode_reward = 0
+                self.current_episode_steps = 0
+
         return True
 
 def make_env(rank, seed=0):
@@ -60,7 +315,7 @@ def make_env(rank, seed=0):
 def setup_wandb(config, random_name):
     """Weights & Biases 설정"""
     run = wandb.init(
-        project="genesis-robot",
+        project="genesis-robot-cl",
         name=random_name,
         config=config,
         sync_tensorboard=True,
@@ -78,7 +333,7 @@ def train_genesis(
     algorithm="SAC",
     total_timesteps=30_000_000,
     seed=42,
-    num_envs=1,  # Genesis는 1개 환경만 사용
+    num_envs=1,
     learning_rate=0.00056234,
     batch_size=1024,
     n_epochs=10,
@@ -88,14 +343,10 @@ def train_genesis(
     train_freq=10,
     gradient_steps=8,
     save_freq=1000,
-    eval_freq=10000,
-    n_eval_episodes=10,
-    log_interval=1,
     device="auto",
     random_name=None
 ):
     """Genesis Simulator 훈련 함수"""
-    # 랜덤 이름 생성
     if random_name is None:
         random_name = get_random_name()
 
@@ -116,21 +367,19 @@ def train_genesis(
         "net_arch": [64, 64],
         "device": device
     }
-    global Is_Genesis_initialized, env
 
     # wandb 초기화
-    run = setup_wandb(config, random_name)
+    run = wandb.init(
+        project="genesis-robot-cl",
+        name=random_name,
+        config=config,
+        monitor_gym=True,
+        save_code=True,
+    )
     
     # 실험 결과 저장 디렉토리 생성
     save_path = os.path.join("training_results", random_name)
     os.makedirs(save_path, exist_ok=True)
-
-
-    # 로컬 로거 설정
-    log_path = os.path.join(save_path, "logs")
-    os.makedirs(log_path, exist_ok=True)
-    new_logger = configure(log_path, ["stdout", "csv", "tensorboard"])
-
 
     if algorithm == "SAC":
         model = SAC(
@@ -144,43 +393,33 @@ def train_genesis(
             train_freq=train_freq,
             gradient_steps=gradient_steps,
             policy_kwargs={"net_arch": [64, 64]},
-            tensorboard_log=os.path.join(save_path, "tensorboard"),
             device=device,
-            verbose=1,
+            verbose=2,  # 기본 로깅 비활성화
         )
     else:
         raise ValueError(f"Unknown algorithm: {algorithm}")
 
-    # 콜백 설정
+    # 커스텀 콜백 설정
     callbacks = [
-        WandbCallback(
-            model_save_path=None,
-            verbose=2,
-        ),
-        SaveModelEveryNEpisodesCallback(
-            n_episodes=save_freq,
+        CustomLoggingCallback(
+            save_freq=save_freq,
             save_path=os.path.join(save_path, "models"),
             prefix_name=random_name,
             wandb_run=run,
-            verbose=1
+            verbose=2
         )
     ]
-
-    # 로거 설정
-    model.set_logger(new_logger)
 
     # 학습 시작
     try:
         model.learn(
             total_timesteps=total_timesteps,
             callback=callbacks,
-            log_interval=log_interval,
         )
     
         # 최종 모델 저장
         final_model_path = os.path.join(save_path, f"{random_name}_final.tar")
         model.save(final_model_path)
-        # env.save(os.path.join(save_path, "vec_normalize.pkl"))
         
         # 최종 모델을 W&B에 업로드
         artifact = wandb.Artifact(name=f"{random_name}_final", type="model")
@@ -195,6 +434,14 @@ def train_genesis(
         run.finish()
         
     return model, env
+
+
+
+
+
+
+
+
 
 if __name__ == "__main__":
     # GPU 사용 가능 여부 확인

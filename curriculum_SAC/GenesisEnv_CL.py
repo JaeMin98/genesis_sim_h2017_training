@@ -49,10 +49,13 @@ class Genesis_Simulator(gym.Env):
         self._initialize_scene()
         self.observation_bounds = self._load_or_explore_workspace_bounds()
         self._initialize_rl_parameters()
-        self.generate_target_csv()
 
         self.steps = 0
         self.max_steps = 256
+        
+        self.Curriculum_manager = CurriculumManager()
+        self.target, self.Selected_UoC = self.Curriculum_manager.get_current_target()
+        self.Is_success = False
 
     def _initialize_scene(self):
         """씬 구성."""
@@ -71,12 +74,6 @@ class Genesis_Simulator(gym.Env):
         self.scene.build()
 
     def _initialize_rl_parameters(self):
-        """목표 위치 로드 및 초기화."""
-        self.learning_points_file_path = "Preprocessing_datas/learning_points.csv"
-        df = pd.read_csv(self.learning_points_file_path, header=None)
-        self.target_file_data = df.values.tolist()
-        self.target = [0.0] * len(self.target_file_data[0])
-
         self.goal_allowable_error = 0.03
         self.action_weight = 0.3
         
@@ -203,9 +200,15 @@ class Genesis_Simulator(gym.Env):
     def reset(self, *, seed=None, options=None):
         """
         환경 초기화. gymnasium 요구사항에 맞게 수정된 reset 메서드.
+        UoC 성공률과 current_UoC를 info에 포함하여 반환
         """
         super().reset(seed=seed)  # 부모 클래스의 reset 호출
         
+        # 이전 에피소드의 결과를 curriculum manager에 업데이트
+        if (self.Selected_UoC != None):
+            self.Curriculum_manager.update_curriculum_state(self.Is_success, self.Selected_UoC)
+        self.Is_success = False
+
         # 관절 위치 초기화
         zero_positions = [0.0] * len(self.joint_ranges)
         self.H2017.set_dofs_position(position=zero_positions)
@@ -215,6 +218,7 @@ class Genesis_Simulator(gym.Env):
         self.steps = 0
 
         obs = self._compute_state()
+        
         info = {}
         self.scene.step()
 
@@ -235,22 +239,18 @@ class Genesis_Simulator(gym.Env):
         reward, terminated, is_success = self._compute_reward()
         truncated = self.steps >= self.max_steps
 
-        info = {"is_success": is_success}
+        info = {
+            "is_success": is_success,
+        }
+
+        # 에피소드가 끝날 때만 Curriculum Learning 정보 추가
+        if terminated or truncated:
+            info.update({
+                "current_uoc": self.Curriculum_manager.current_uoc,
+                "all_uocs_success_rate": self.Curriculum_manager.get_all_uocs_success_rate()
+            })
 
         return np.array(next_obs, dtype=np.float32), reward, terminated, truncated, info
-
-    def _compute_reward(self):
-        """보상 계산"""
-        distance_to_goal = self.distance
-        reward = - distance_to_goal
-
-        is_success = distance_to_goal < self.goal_allowable_error
-        if is_success:
-            reward += 100
-
-        terminated = is_success or self.steps >= self.max_steps
-
-        return reward, terminated, is_success
 
     def _compute_reward(self):
         """향상된 보상 계산"""
@@ -289,7 +289,7 @@ class Genesis_Simulator(gym.Env):
         )
 
         terminated = is_success or self.steps >= self.max_steps
-        
+        self.Is_success = is_success
         return reward, terminated, is_success
 
     def _compute_state(self):
@@ -336,8 +336,8 @@ class Genesis_Simulator(gym.Env):
 
     def _update_target(self):
         """새로운 목표 위치 설정"""
-        random_idx = np.random.randint(0, len(self.target_file_data))
-        self.target = self.target_file_data[random_idx]
+        self.Curriculum_manager.select_target_with_replay()
+        self.target, self.Selected_UoC = self.Curriculum_manager.get_current_target()
 
     def _apply_action(self, action):
         """
@@ -378,46 +378,170 @@ class Genesis_Simulator(gym.Env):
             target_positions[joint_idx] = low + (high - low) * np.random.random()
             
         return target_positions
+    
+from dataclasses import dataclass
+from pathlib import Path
+from typing import List, Dict, Tuple, Optional, Deque
+import csv
+import glob
+import os
+import random
+from collections import defaultdict, deque
 
-    def generate_target_csv(self, num_targets=20000):
-        # 파일이 이미 존재하는지 확인
-        if os.path.exists(self.learning_points_file_path):
-            print(f"######## Target file already exists at: {self.learning_points_file_path}")
-            print("######## Skipping target generation.")
-            return None
+@dataclass
+class CurriculumConfig:
+    """Configuration settings for curriculum management"""
+    REPLAY_RATIO: float = 0.2
+    SUCCESS_THRESHOLD: float = 1.0
+    HISTORY_WINDOW_SIZE: int = 100  # Number of recent entries to consider for success rate
+    EXIT_ON_SUCCESS: bool = True
 
-        # 저장 디렉토리가 없으면 생성
-        os.makedirs(os.path.dirname(self.learning_points_file_path), exist_ok=True)
+class CurriculumManager:
 
-        # 목표점 생성
-        targets = []
-        print(f"######## Generating {num_targets} target positions...")
-        for _ in tqdm(range(num_targets)):
-            # 모든 관절을 0으로 초기화
-            joint_positions = [0.0] * len(self.joint_ranges)
+    def __init__(self, csv_path: str = "./Curriculum_builder/Uoc_data/2025-01-20_22-11-34/data") -> None:
+        self.csv_path = Path(csv_path)
+        self.config = CurriculumConfig()
+        self._initialize_curriculum_state()
+        self.uoc_data = self._load_all_uoc_data()
+        
+        # Initialize success history for each UoC
+        self.success_history: Dict[int, Deque[bool]] = defaultdict(
+            lambda: deque(maxlen=self.config.HISTORY_WINDOW_SIZE)
+        )
+
+    def _initialize_curriculum_state(self) -> None:
+        """Initialize curriculum state variables"""
+        self.target: List[float] = [0, 0, 0]
+        self.success_rate_cache: Optional[Dict[int, float]] = None
+        
+        # Set UoC parameters based on available data
+        self.max_uoc = self._count_csv_files()
+        self.min_uoc = 1
+        self.current_uoc = 1
+        self.selected_uoc = 1
+
+    def _count_csv_files(self) -> int:
+        """Count number of UoC CSV files in the data directory"""
+        try:
+            path_pattern = os.path.join(self.csv_path, '*.csv')
+            return len(glob.glob(path_pattern))
+        except Exception as e:
+            raise RuntimeError(f"Error accessing curriculum directory: {e}")
+
+    def _load_all_uoc_data(self) -> List[List[List[str]]]:
+        """Load all UoC data from CSV files"""
+        uoc_data = []
+        for uoc in range(self.min_uoc, self.max_uoc + 1):
+            try:
+                uoc_data.append(self._read_uoc_file(uoc))
+            except Exception as e:
+                raise RuntimeError(f"Error loading UoC {uoc} data: {e}")
+        return uoc_data
+
+    def _read_uoc_file(self, uoc: int) -> List[List[str]]:
+        """Read individual UoC CSV file"""
+        file_path = self.csv_path / f'UoC_{uoc}.csv'
+        try:
+            with open(file_path, 'r') as file:
+                return [row[:3] for row in csv.reader(file)]
+        except FileNotFoundError:
+            raise FileNotFoundError(f"UoC file not found: {file_path}")
+        except Exception as e:
+            raise RuntimeError(f"Error reading UoC file {file_path}: {e}")
+
+    def record_episode_result(self, success: bool, uoc: int) -> None:
+        """Record the result of a learning episode"""
+        self.success_history[uoc].append(success)
+        self.success_rate_cache = None  # Invalidate cache
+
+    def clear_episode_history(self) -> None:
+        """Clear historical episode data"""
+        self.success_history.clear()
+        self.success_rate_cache = None
+
+    def calculate_success_rates(self) -> Dict[int, float]:
+        """
+        Calculate success rates for each UoC based on recent history.
+        Uses only the most recent HISTORY_WINDOW_SIZE entries for each UoC.
+        """
+        if self.success_rate_cache is not None:
+            return self.success_rate_cache
             
-            # 활성화된 관절에 대해서만 랜덤 값 생성
-            for joint_idx in self.activate_joint:
-                low, high = self.joint_ranges[joint_idx]
-                joint_positions[joint_idx] = low + (high - low) * np.random.random()
-            
-            # 조인트 위치 설정
-            self.H2017.set_dofs_position(position=joint_positions)
-            self.scene.step()
-            
-            # 엔드이펙터 위치 얻기
-            ee_pos = self.H2017.get_link("link6").get_pos()
-            if hasattr(ee_pos, 'tolist'):
-                ee_pos = ee_pos.tolist()
-            
-            targets.append(ee_pos)
+        self.success_rate_cache = {
+            uoc: sum(history) / len(history)
+            for uoc, history in self.success_history.items()
+            if history  # Only calculate for UoCs with data
+        }
+        return self.success_rate_cache
 
-        # CSV 파일로 저장
-        df = pd.DataFrame(targets)
-        df.to_csv(self.learning_points_file_path, index=False, header=False)
-        print(f"######## Target positions saved to: {self.learning_points_file_path}")
+    def get_success_rate(self, uoc: int) -> float:
+        """Get the success rate for a specific UoC"""
+        history = self.success_history[uoc]
+        if not history:
+            return 0.0
+        return sum(history) / len(history)
 
-        return targets
+    def get_all_uocs_success_rate(self) -> list:
+        all_uocs_success_rate = []
+        for i in range(self.min_uoc, self.max_uoc+1):
+            history = self.success_history[i]
+            if not history:
+                all_uocs_success_rate.append(0.0)
+            else:
+                success_rate = round(sum(history), 0)
+                all_uocs_success_rate.append(success_rate)
+        return all_uocs_success_rate
+    
+    def update_curriculum_state(self, success: bool, uoc: int) -> None:
+        """
+        Update curriculum state based on learning outcomes
+        
+        Args:
+            success: Whether the latest episode was successful
+            uoc: The UoC level of the episode
+        """
+        self.record_episode_result(success, uoc)
+        
+        # Get success rate for current UoC
+        current_success_rate = self.get_success_rate(self.current_uoc)
+        
+        # Check if we have enough data and success rate exceeds threshold
+        if (len(self.success_history[self.current_uoc]) >= self.config.HISTORY_WINDOW_SIZE and 
+            current_success_rate >= self.config.SUCCESS_THRESHOLD):
+            self._handle_success_progression()
+
+    def _handle_success_progression(self) -> None:
+        """Handle progression after success threshold is met"""
+        next_uoc = self.current_uoc + 1
+        if next_uoc <= self.max_uoc:
+            self.current_uoc = next_uoc
+            # self.clear_episode_history()
+        elif self.config.EXIT_ON_SUCCESS:
+            raise SystemExit(0)
+
+    def select_target(self, uoc: int) -> None:
+        """Select a random target from the specified UoC data"""
+        if not 0 <= uoc < len(self.uoc_data):
+            raise ValueError(f"Invalid UoC index: {uoc}")
+            
+        random_index = random.randrange(len(self.uoc_data[uoc]))
+        self.target = [
+            round(float(element), 4)
+            for element in self.uoc_data[uoc][random_index]
+        ]
+
+    def select_target_with_replay(self) -> None:
+        """Select target with replay mechanism for previous UoCs"""
+        if random.random() > self.config.REPLAY_RATIO:
+            self.selected_uoc = self.current_uoc
+        else:
+            self.selected_uoc = random.randint(1, max(1, self.current_uoc - 1))
+        
+        self.select_target(self.selected_uoc - 1)
+
+    def get_current_target(self) -> Tuple[List[float], int]:
+        """Get the current target and selected UoC"""
+        return self.target, self.selected_uoc
 
 import time
 from datetime import datetime
