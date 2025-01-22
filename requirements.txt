@@ -7,3 +7,5 @@ pip install stable-baselines3[extra]
 pip install wandb
 pip install tqdm
 pip install scikit-learn
+pip install --upgrade requests
+pip install cffi
