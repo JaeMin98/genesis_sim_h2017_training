@@ -366,7 +366,8 @@ def train_genesis(
 if __name__ == "__main__":
 
     env = None
-    for i in range(8):
+    learning_UoCs = [1,2,3,4,5,6,7,8]
+    for learning_UoC in learning_UoCs:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"Using device: {device}")
         
@@ -385,7 +386,7 @@ if __name__ == "__main__":
             "gradient_steps": 8,
             "device": device,
             "UoC_dir" : "Preprocessing_datas/2025-01-20_22-11-34/data/",
-            "UoC_name" : f"UoC_{i+1}",
+            "UoC_name" : f"UoC_{learning_UoC}",
             "env" : env
         }
         
