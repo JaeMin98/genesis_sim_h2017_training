@@ -1,0 +1,9 @@
+pip3 install torch torchvision torchaudio
+pip install genesis-world
+https://github.com/ompl/ompl/releases/tag/prerelease
+pip install gymnasium
+pip install pandas
+pip install stable-baselines3[extra]
+pip install wandb
+pip install tqdm
+pip install scikit-learn
