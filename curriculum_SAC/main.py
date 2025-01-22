@@ -226,8 +226,8 @@ class CustomLoggingCallback(BaseCallback):
             # wandb에 리셋 이벤트 로깅
             if self.run is not None:
                 wandb.log({
-                    "replay_buffer/reset_episode": self.episode_count,
-                    "replay_buffer/kept_samples": min(2000, replay_buffer.size())
+                    # "replay_buffer/reset_episode": [self.episode_count, self.episode_count],
+                    "replay_buffer/kept_samples": [self.episode_count, min(2000, replay_buffer.size())]
                 })
                 
         except Exception as e:
@@ -277,9 +277,11 @@ class CustomLoggingCallback(BaseCallback):
 
         # info 딕셔너리에서 정보 추출
         infos = self.locals["infos"]
+        count = 0
         for info in infos:
             if "episode" in info:
                 self.episode_count += 1
+                count += 1
                 
                 # Success 정보 업데이트
                 is_success = info.get("is_success", False)
@@ -309,27 +311,30 @@ class CustomLoggingCallback(BaseCallback):
                 # 성공률 계산
                 overall_success_rate = self._get_success_rates()
                 
-                # 메트릭스 준비
+                # wandb에 로깅할 메트릭스 준비
                 metrics = {
-                    "rollout/episode_reward": self.current_episode_reward,
-                    "rollout/episode_length": self.current_episode_steps,
-                    "rollout/episode_reward_mean": recent_mean_reward,
-                    "rollout/episode_length_mean": np.mean(self.episode_lengths[-100:]),
-                    "rollout/success_rate": overall_success_rate,
-                    "time/total_timesteps": self.num_timesteps,
-                    "time/fps": int(self.num_timesteps / (training_time + 1e-8)),
-                    "replay_buffer/size": current_size,
-                    "replay_buffer/usage_percent": memory_usage,
+                    "rollout/episode_reward": [self.episode_count, self.current_episode_reward],
+                    "rollout/episode_length": [self.episode_count, self.current_episode_steps],
+                    "rollout/episode_reward_mean": [self.episode_count, recent_mean_reward],
+                    "rollout/episode_length_mean": [self.episode_count, np.mean(self.episode_lengths[-100:])],
+                    "rollout/success_rate": [self.episode_count, overall_success_rate],
+                    "time/total_timesteps": [self.episode_count, self.num_timesteps],
+                    "time/fps": [self.episode_count, int(self.num_timesteps / (training_time + 1e-8))],
+                    "replay_buffer/size": [self.episode_count, current_size],
+                    "replay_buffer/usage_percent": [self.episode_count, memory_usage],
                 }
 
                 # Loss 메트릭 추가
                 if self.last_actor_loss is not None:
-                    metrics["train/actor_loss"] = self.last_actor_loss
+                    metrics["train/actor_loss"] = [self.episode_count, self.last_actor_loss]
                 if self.last_critic_loss is not None:
-                    metrics["train/critic_loss"] = self.last_critic_loss
+                    metrics["train/critic_loss"] = [self.episode_count, self.last_critic_loss]
                 if self.last_ent_coef is not None:
-                    metrics["train/ent_coef"] = self.last_ent_coef
+                    metrics["train/ent_coef"] = [self.episode_count, self.last_ent_coef]
 
+                # CSV 파일에 로깅을 위한 메트릭스
+                csv_metrics = {k: v[1] for k, v in metrics.items()}  # CSV에는 값만 저장
+                
                 # 커리큘럼 데이터 준비
                 curriculum_data = None
                 if "current_uoc" in info and "all_uocs_success_rate" in info:
@@ -339,16 +344,21 @@ class CustomLoggingCallback(BaseCallback):
                     }
 
                 # CSV 파일에 로깅
-                self.log_to_csv(metrics, curriculum_data)
+                self.log_to_csv(csv_metrics, curriculum_data)
 
                 # wandb에 로깅
                 if self.run is not None:
-                    wandb.log(metrics)
+                    # 기본 메트릭스 로깅
+                    for metric_name, (step, value) in metrics.items():
+                        wandb.log({metric_name: value}, step=step)
+                    
+                    # 커리큘럼 데이터 로깅
                     if curriculum_data:
                         for i, rate in enumerate(curriculum_data["all_uocs_success_rate"]):
-                            metrics[f"curriculum/uoc_{i+1}_success_rate"] = rate
-                        metrics["curriculum/current_uoc"] = current_uoc
-                        wandb.log(metrics)
+                            wandb.log({
+                                f"curriculum/uoc_{i+1}_success_rate": rate,
+                                "curriculum/current_uoc": current_uoc
+                            }, step=self.episode_count)
                 
                 # 주기적인 모델 저장
                 if self.episode_count % self.save_freq == 0:
@@ -462,7 +472,7 @@ def train_genesis(
             save_path=os.path.join(save_path, "models"),
             prefix_name=random_name,
             wandb_run=run,
-            verbose=2
+            verbose=1
         )
     ]
 
