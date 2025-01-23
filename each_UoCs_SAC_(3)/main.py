@@ -38,7 +38,7 @@ class CustomLoggingCallback(BaseCallback):
         self.current_episode_steps = 0
         
         # Success rate tracking
-        self.success_window = 200
+        self.success_window = 200 #trick
         self.success_history = [False * self.success_window]
         
         # Loss tracking
