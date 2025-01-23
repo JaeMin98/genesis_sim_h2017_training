@@ -163,8 +163,9 @@ def validate_all_models(base_dir='models', num_episodes_per_uoc=100):
         return None
 
 if __name__ == "__main__":
+    DETERMINISTIC = False
     results = validate_all_models(num_episodes_per_uoc=NUM_OF_EPISODE)
-    DETERMINISTIC = True
+    
     if results is not None:
         print("\nCombined Validation Results Summary:")
         print(results.to_string(index=False))
