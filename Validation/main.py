@@ -9,6 +9,8 @@ from tqdm import tqdm
 import glob
 
 ENV = Genesis_Simulator(render=False)
+DETERMINISTIC = True
+NUM_OF_EPISODE = 100
 
 class ModelValidator:
     def __init__(self, model_path, num_episodes_per_uoc=100):
@@ -28,6 +30,7 @@ class ModelValidator:
         }
         
     def validate_uoc(self, uoc):
+        global DETERMINISTIC
         episode_lengths = []
         successes = []
         distances = []
@@ -45,7 +48,7 @@ class ModelValidator:
             last_ee_pos = None
             
             while not (done or truncated):
-                action, _ = self.model.predict(obs, deterministic=True)
+                action, _ = self.model.predict(obs, deterministic=DETERMINISTIC)
                 obs, _, done, truncated, info = self.env.step(action)
                 
                 episode_length += 1
@@ -149,8 +152,8 @@ def validate_all_models(base_dir='models', num_episodes_per_uoc=100):
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         output_dir = 'validation_results'
         os.makedirs(output_dir, exist_ok=True)
-        
-        output_path = os.path.join(output_dir, f'combined_validation_results_{timestamp}.csv')
+        global DETERMINISTIC, NUM_OF_EPISODE
+        output_path = os.path.join(output_dir, f'results_deterministic_{DETERMINISTIC}_episode_{NUM_OF_EPISODE}_{timestamp}.csv')
         combined_results.to_csv(output_path, index=False)
         
         print(f"\nAll validation results saved to: {output_path}")
@@ -160,7 +163,8 @@ def validate_all_models(base_dir='models', num_episodes_per_uoc=100):
         return None
 
 if __name__ == "__main__":
-    results = validate_all_models(num_episodes_per_uoc=100)
+    results = validate_all_models(num_episodes_per_uoc=NUM_OF_EPISODE)
+    DETERMINISTIC = True
     if results is not None:
         print("\nCombined Validation Results Summary:")
         print(results.to_string(index=False))
