@@ -8,11 +8,14 @@ from GenesisEnv_CL import Genesis_Simulator
 from tqdm import tqdm
 import glob
 
+ENV = Genesis_Simulator(render=False)
+
 class ModelValidator:
     def __init__(self, model_path, num_episodes_per_uoc=100):
         self.model_path = model_path
         self.num_episodes_per_uoc = num_episodes_per_uoc
-        self.env = Genesis_Simulator(render=False)
+        global ENV
+        self.env = ENV
         self.model = SAC.load(model_path)
         
         self.results = {
@@ -29,8 +32,10 @@ class ModelValidator:
         successes = []
         distances = []
         trajectory_lengths = []
+
+        self.env.Curriculum_manager.current_uoc = uoc
         
-        for _ in tqdm(range(self.num_episodes_per_uoc), desc=f'Validating UoC {uoc}'):
+        for _ in tqdm(range(self.num_episodes_per_uoc), desc=f'Validating UoC {self.env.Curriculum_manager.current_uoc}'):
             obs, _ = self.env.reset()
             done = False
             truncated = False
@@ -40,7 +45,7 @@ class ModelValidator:
             last_ee_pos = None
             
             while not (done or truncated):
-                action, _ = self.model.predict(obs, deterministic=False)
+                action, _ = self.model.predict(obs, deterministic=True)
                 obs, _, done, truncated, info = self.env.step(action)
                 
                 episode_length += 1
