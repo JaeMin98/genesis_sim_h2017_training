@@ -270,7 +270,7 @@ def train_genesis(
 ):
     if (env == None):
         Region_path = os.path.join(Region_dir, f"{Region_name}.csv")
-        env = Genesis_Simulator(render=False, Region_path=Region_path)
+        env = Genesis_Simulator(render=False, UoC_path=Region_path)
         env = Monitor(env)
 
     """Genesis Simulator 훈련 함수"""
@@ -385,7 +385,7 @@ if __name__ == "__main__":
             "train_freq": 10,
             "gradient_steps": 8,
             "device": device,
-            "Region_dir" : "Preprocessing_datas/2025-01-20_22-11-34/data/",
+            "Region_dir" : "Preprocessing_datas/physical_space_2025-01-23_14-18-28/data/",
             "Region_name" : f"Region_{learning_Region}",
             "env" : env
         }
