@@ -73,12 +73,13 @@ class Genesis_Simulator(gym.Env):
 
     def _initialize_rl_parameters(self):
         """목표 위치 로드 및 초기화."""
+        print(self.UoC_path)
         self.learning_points_file_path = self.UoC_path
         df = pd.read_csv(self.learning_points_file_path, header=None)
         self.target_file_data = df.values.tolist()
         self.target = [0.0] * len(self.target_file_data[0])
 
-        self.goal_allowable_error = 0.03
+        self.goal_allowable_error = 0.015 #trick
         self.action_weight = 0.3
         
         self.Rd_weight = -1.0 #distance_reward

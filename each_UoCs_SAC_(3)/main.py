@@ -38,7 +38,7 @@ class CustomLoggingCallback(BaseCallback):
         self.current_episode_steps = 0
         
         # Success rate tracking
-        self.success_window = 100
+        self.success_window = 200
         self.success_history = [False * self.success_window]
         
         # Loss tracking
@@ -264,14 +264,18 @@ def train_genesis(
     save_freq=1000,
     device="auto",
     random_name=None,
-    UoC_dir = "Preprocessing_datas/2025-01-20_22-11-34/data/",
-    UoC_name = "UoC_1",
+    UoC_dir = None,
+    UoC_name = None,
     env = None
 ):
+    UoC_path = os.path.join(UoC_dir, f"{UoC_name}.csv")
     if (env == None):
-        UoC_path = os.path.join(UoC_dir, f"{UoC_name}.csv")
         env = Genesis_Simulator(render=False, UoC_path=UoC_path)
         env = Monitor(env)
+    else:
+        env.env.UoC_path=UoC_path
+        env.env._initialize_rl_parameters()
+        env.env.generate_target_csv()
 
     """Genesis Simulator 훈련 함수"""
     if random_name is None:
@@ -367,6 +371,7 @@ if __name__ == "__main__":
 
     env = None
     learning_UoCs = [1,2,3,4]
+
     for learning_UoC in learning_UoCs:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"Using device: {device}")
