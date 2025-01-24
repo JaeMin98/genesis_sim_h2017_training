@@ -37,7 +37,7 @@ class CustomLoggingCallback(BaseCallback):
         self.current_episode_steps = 0
         
         # Success rate tracking
-        self.success_window = 100
+        self.success_window = 200
         self.success_history = [False * self.success_window]
         
         # Loss tracking
@@ -369,7 +369,7 @@ if __name__ == "__main__":
         "total_timesteps": 30_000_000,
         "seed": 42,
         "num_envs": 1,
-        "learning_rate": 0.00056234,
+        "learning_rate": 0.00015,
         "batch_size": 1024,
         "gamma": 0.97,
         "buffer_size": 30_000_000,
