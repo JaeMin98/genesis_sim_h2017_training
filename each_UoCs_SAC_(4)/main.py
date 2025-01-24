@@ -366,7 +366,7 @@ def train_genesis(
 if __name__ == "__main__":
 
     env = None
-    learning_Regions = [1,2,3,4,5,6,7,8]
+    learning_Regions = [8,7,6,5,4,3,2,1]
     for learning_Region in learning_Regions:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"Using device: {device}")
