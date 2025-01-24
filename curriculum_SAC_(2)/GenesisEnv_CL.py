@@ -391,7 +391,7 @@ from collections import defaultdict, deque
 @dataclass
 class CurriculumConfig:
     """Configuration settings for curriculum management"""
-    REPLAY_RATIO: float = 0.2
+    REPLAY_RATIO: float = 0.5
     SUCCESS_THRESHOLD: float = 1.0
     HISTORY_WINDOW_SIZE: int = 100  # Number of recent entries to consider for success rate
     EXIT_ON_SUCCESS: bool = True

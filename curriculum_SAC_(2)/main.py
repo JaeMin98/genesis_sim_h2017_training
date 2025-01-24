@@ -494,7 +494,7 @@ if __name__ == "__main__":
         "total_timesteps": 30_000_000,
         "seed": 42,
         "num_envs": 1,
-        "learning_rate": 0.00056234,
+        "learning_rate": 0.00015,
         "batch_size": 1024,
         "gamma": 0.97,
         "buffer_size": 30_000_000,
