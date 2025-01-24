@@ -169,3 +169,10 @@ if __name__ == "__main__":
     if results is not None:
         print("\nCombined Validation Results Summary:")
         print(results.to_string(index=False))
+
+    DETERMINISTIC = False
+    results = validate_all_models(num_episodes_per_uoc=NUM_OF_EPISODE)
+    
+    if results is not None:
+        print("\nCombined Validation Results Summary:")
+        print(results.to_string(index=False))
