@@ -38,7 +38,7 @@ class CustomLoggingCallback(BaseCallback):
         self.current_episode_steps = 0
         
         # Success rate tracking
-        self.success_window = 100
+        self.success_window = 200 #trick
         self.success_history = [False * self.success_window]
         
         # Loss tracking
@@ -264,14 +264,18 @@ def train_genesis(
     save_freq=1000,
     device="auto",
     random_name=None,
-    Region_dir = "Preprocessing_datas/physical_space_2025-01-23_14-18-28/data/",
-    Region_name = "Region_1",
+    Region_dir = None,
+    Region_name = None,
     env = None
 ):
+    Region_path = os.path.join(Region_dir, f"{Region_name}.csv")
     if (env == None):
-        Region_path = os.path.join(Region_dir, f"{Region_name}.csv")
-        env = Genesis_Simulator(render=False, UoC_path=Region_path)
+        env = Genesis_Simulator(render=False, Region_path=Region_path)
         env = Monitor(env)
+    else:
+        env.env.Region_path=Region_path
+        env.env._initialize_rl_parameters()
+        env.env.generate_target_csv()
 
     """Genesis Simulator 훈련 함수"""
     if random_name is None:
@@ -297,7 +301,7 @@ def train_genesis(
 
     # wandb 초기화
     run = wandb.init(
-        project="genesis-robot-each-Regions-parsing",
+        project="genesis-robot-each-Regions",
         name=random_name,
         config=config,
         monitor_gym=True,
@@ -367,6 +371,7 @@ if __name__ == "__main__":
 
     env = None
     learning_Regions = [1,2,3,4,5,6,7,8]
+
     for learning_Region in learning_Regions:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"Using device: {device}")
@@ -385,7 +390,7 @@ if __name__ == "__main__":
             "train_freq": 10,
             "gradient_steps": 8,
             "device": device,
-            "Region_dir" : "Preprocessing_datas/physical_space_2025-01-23_14-18-28/data/",
+            "Region_dir" : "Preprocessing_datas/physical_space_2025-01-23_14-18-28/data",
             "Region_name" : f"Region_{learning_Region}",
             "env" : env
         }

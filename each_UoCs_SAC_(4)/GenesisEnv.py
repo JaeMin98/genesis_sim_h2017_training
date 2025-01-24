@@ -17,9 +17,9 @@ class Genesis_Simulator(gym.Env):
         "render_fps": 30
     }
 
-    def __init__(self, render=False, UoC_path="UoC_path.csv", **kwargs):
+    def __init__(self, render=False, Region_path="Region_path.csv", **kwargs):
         super().__init__()
-        self.UoC_path = UoC_path
+        self.Region_path = Region_path
         self.render_enabled = render
 
         self.state_dim = 9
@@ -73,12 +73,13 @@ class Genesis_Simulator(gym.Env):
 
     def _initialize_rl_parameters(self):
         """목표 위치 로드 및 초기화."""
-        self.learning_points_file_path = self.UoC_path
+        print(self.Region_path)
+        self.learning_points_file_path = self.Region_path
         df = pd.read_csv(self.learning_points_file_path, header=None)
         self.target_file_data = df.values.tolist()
         self.target = [0.0] * len(self.target_file_data[0])
 
-        self.goal_allowable_error = 0.03
+        self.goal_allowable_error = 0.015 #trick
         self.action_weight = 0.3
         
         self.Rd_weight = -1.0 #distance_reward
