@@ -253,10 +253,10 @@ def train_genesis(
     total_timesteps=30_000_000,
     seed=42,
     num_envs=1,
-    learning_rate=0.00056234,
+    learning_rate=0.0005,
     batch_size=1024,
     n_epochs=10,
-    gamma=0.97,
+    gamma=0.9,
     buffer_size=30_000_000,
     learning_starts=2048,
     train_freq=10,
@@ -356,7 +356,7 @@ def train_genesis(
         model.save(final_model_path)
         
         # 최종 모델을 W&B에 업로드
-        artifact = wandb.Artifact(name=f"{random_name}_final", type="model")
+        artifact = wandb.Artifact(name=f"{random_name}_{gamma}_{learning_rate}_final", type="model")
         artifact.add_file(final_model_path)
         run.log_artifact(artifact)
 
@@ -382,9 +382,9 @@ if __name__ == "__main__":
             "total_timesteps": 30_000_000,
             "seed": 42,
             "num_envs": 1,
-            "learning_rate": 0.00056234,
+            "learning_rate": 0.0003,
             "batch_size": 1024,
-            "gamma": 0.97,
+            "gamma": 0.90,
             "buffer_size": 30_000_000,
             "learning_starts": 2048,
             "train_freq": 10,
