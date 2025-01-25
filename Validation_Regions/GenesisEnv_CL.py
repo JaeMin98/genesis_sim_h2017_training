@@ -54,7 +54,7 @@ class Genesis_Simulator(gym.Env):
         self.max_steps = 256
         
         self.Curriculum_manager = CurriculumManager()
-        self.target, self.Selected_UoC = self.Curriculum_manager.get_current_target()
+        self.target, self.Selected_Region = self.Curriculum_manager.get_current_target()
         self.Is_success = False
 
     def _initialize_scene(self):
@@ -200,13 +200,13 @@ class Genesis_Simulator(gym.Env):
     def reset(self, *, seed=None, options=None):
         """
         환경 초기화. gymnasium 요구사항에 맞게 수정된 reset 메서드.
-        Region 성공률과 current_UoC를 info에 포함하여 반환
+        Region 성공률과 current_Region를 info에 포함하여 반환
         """
         super().reset(seed=seed)  # 부모 클래스의 reset 호출
         
         # 이전 에피소드의 결과를 curriculum manager에 업데이트
-        if (self.Selected_UoC != None):
-            self.Curriculum_manager.update_curriculum_state(self.Is_success, self.Selected_UoC)
+        if (self.Selected_Region != None):
+            self.Curriculum_manager.update_curriculum_state(self.Is_success, self.Selected_Region)
         self.Is_success = False
 
         # 관절 위치 초기화
@@ -246,8 +246,8 @@ class Genesis_Simulator(gym.Env):
         # 에피소드가 끝날 때만 Curriculum Learning 정보 추가
         if terminated or truncated:
             info.update({
-                "current_uoc": self.Curriculum_manager.current_uoc,
-                "all_uocs_success_rate": self.Curriculum_manager.get_all_uocs_success_rate()
+                "current_Region": self.Curriculum_manager.current_Region,
+                "all_Regions_success_rate": self.Curriculum_manager.get_all_Regions_success_rate()
             })
 
         return np.array(next_obs, dtype=np.float32), reward, terminated, truncated, info
@@ -337,7 +337,7 @@ class Genesis_Simulator(gym.Env):
     def _update_target(self):
         """새로운 목표 위치 설정"""
         self.Curriculum_manager.select_target_with_replay()
-        self.target, self.Selected_UoC = self.Curriculum_manager.get_current_target()
+        self.target, self.Selected_Region = self.Curriculum_manager.get_current_target()
 
     def _apply_action(self, action):
         """
@@ -402,7 +402,7 @@ class CurriculumManager:
         self.csv_path = Path(csv_path)
         self.config = CurriculumConfig()
         self._initialize_curriculum_state()
-        self.uoc_data = self._load_all_uoc_data()
+        self.Region_data = self._load_all_Region_data()
         
         # Initialize success history for each Region
         self.success_history: Dict[int, Deque[bool]] = defaultdict(
@@ -415,10 +415,10 @@ class CurriculumManager:
         self.success_rate_cache: Optional[Dict[int, float]] = None
         
         # Set Region parameters based on available data
-        self.max_uoc = self._count_csv_files()
-        self.min_uoc = 1
-        self.current_uoc = 1
-        self.selected_uoc = 1
+        self.max_Region = self._count_csv_files()
+        self.min_Region = 1
+        self.current_Region = 1
+        self.selected_Region = 1
 
     def _count_csv_files(self) -> int:
         """Count number of Region CSV files in the data directory"""
@@ -428,19 +428,19 @@ class CurriculumManager:
         except Exception as e:
             raise RuntimeError(f"Error accessing curriculum directory: {e}")
 
-    def _load_all_uoc_data(self) -> List[List[List[str]]]:
+    def _load_all_Region_data(self) -> List[List[List[str]]]:
         """Load all Region data from CSV files"""
-        uoc_data = []
-        for Region in range(self.min_uoc, self.max_uoc + 1):
+        Region_data = []
+        for Region in range(self.min_Region, self.max_Region + 1):
             try:
-                uoc_data.append(self._read_uoc_file(Region))
+                Region_data.append(self._read_Region_file(Region))
             except Exception as e:
                 raise RuntimeError(f"Error loading Region {Region} data: {e}")
-        return uoc_data
+        return Region_data
 
-    def _read_uoc_file(self, Region: int) -> List[List[str]]:
+    def _read_Region_file(self, Region: int) -> List[List[str]]:
         """Read individual Region CSV file"""
-        file_path = self.csv_path / f'UoC_{Region}.csv'
+        file_path = self.csv_path / f'Region_{Region}.csv'
         try:
             with open(file_path, 'r') as file:
                 return [row[:3] for row in csv.reader(file)]
@@ -470,7 +470,7 @@ class CurriculumManager:
         self.success_rate_cache = {
             Region: sum(history) / len(history)
             for Region, history in self.success_history.items()
-            if history  # Only calculate for UoCs with data
+            if history  # Only calculate for Regions with data
         }
         return self.success_rate_cache
 
@@ -481,16 +481,16 @@ class CurriculumManager:
             return 0.0
         return sum(history) / len(history)
 
-    def get_all_uocs_success_rate(self) -> list:
-        all_uocs_success_rate = []
-        for i in range(self.min_uoc, self.max_uoc+1):
+    def get_all_Regions_success_rate(self) -> list:
+        all_Regions_success_rate = []
+        for i in range(self.min_Region, self.max_Region+1):
             history = self.success_history[i]
             if not history:
-                all_uocs_success_rate.append(0.0)
+                all_Regions_success_rate.append(0.0)
             else:
                 success_rate = round(sum(history), 0)
-                all_uocs_success_rate.append(success_rate)
-        return all_uocs_success_rate
+                all_Regions_success_rate.append(success_rate)
+        return all_Regions_success_rate
     
     def update_curriculum_state(self, success: bool, Region: int) -> None:
         """
@@ -503,45 +503,45 @@ class CurriculumManager:
         self.record_episode_result(success, Region)
         
         # Get success rate for current Region
-        current_success_rate = self.get_success_rate(self.current_uoc)
+        current_success_rate = self.get_success_rate(self.current_Region)
         
         # Check if we have enough data and success rate exceeds threshold
-        if (len(self.success_history[self.current_uoc]) >= self.config.HISTORY_WINDOW_SIZE and 
+        if (len(self.success_history[self.current_Region]) >= self.config.HISTORY_WINDOW_SIZE and 
             current_success_rate >= self.config.SUCCESS_THRESHOLD):
             self._handle_success_progression()
 
     def _handle_success_progression(self) -> None:
         """Handle progression after success threshold is met"""
-        next_uoc = self.current_uoc + 1
-        if next_uoc <= self.max_uoc:
-            self.current_uoc = next_uoc
+        next_Region = self.current_Region + 1
+        if next_Region <= self.max_Region:
+            self.current_Region = next_Region
             # self.clear_episode_history()
         elif self.config.EXIT_ON_SUCCESS:
             raise SystemExit(0)
 
     def select_target(self, Region: int) -> None:
         """Select a random target from the specified Region data"""
-        if not 0 <= Region < len(self.uoc_data):
+        if not 0 <= Region < len(self.Region_data):
             raise ValueError(f"Invalid Region index: {Region}")
             
-        random_index = random.randrange(len(self.uoc_data[Region]))
+        random_index = random.randrange(len(self.Region_data[Region]))
         self.target = [
             round(float(element), 4)
-            for element in self.uoc_data[Region][random_index]
+            for element in self.Region_data[Region][random_index]
         ]
 
     def select_target_with_replay(self) -> None:
-        """Select target with replay mechanism for previous UoCs"""
+        """Select target with replay mechanism for previous Regions"""
         if random.random() > self.config.REPLAY_RATIO:
-            self.selected_uoc = self.current_uoc
+            self.selected_Region = self.current_Region
         else:
-            self.selected_uoc = random.randint(1, max(1, self.current_uoc - 1))
+            self.selected_Region = random.randint(1, max(1, self.current_Region - 1))
         
-        self.select_target(self.selected_uoc - 1)
+        self.select_target(self.selected_Region - 1)
 
     def get_current_target(self) -> Tuple[List[float], int]:
         """Get the current target and selected Region"""
-        return self.target, self.selected_uoc
+        return self.target, self.selected_Region
 
 import time
 from datetime import datetime

@@ -13,9 +13,9 @@ DETERMINISTIC = True
 NUM_OF_EPISODE = 100
 
 class ModelValidator:
-    def __init__(self, model_path, num_episodes_per_uoc=100):
+    def __init__(self, model_path, num_episodes_per_Region=100):
         self.model_path = model_path
-        self.num_episodes_per_uoc = num_episodes_per_uoc
+        self.num_episodes_per_Region = num_episodes_per_Region
         global ENV
         self.env = ENV
         self.model = SAC.load(model_path)
@@ -29,16 +29,16 @@ class ModelValidator:
             'trajectory_efficiency': []
         }
         
-    def validate_uoc(self, Region):
+    def validate_Region(self, Region):
         global DETERMINISTIC
         episode_lengths = []
         successes = []
         distances = []
         trajectory_lengths = []
 
-        self.env.Curriculum_manager.current_uoc = Region
+        self.env.Curriculum_manager.current_Region = Region
         
-        for _ in tqdm(range(self.num_episodes_per_uoc), desc=f'Validating Region {self.env.Curriculum_manager.current_uoc}'):
+        for _ in tqdm(range(self.num_episodes_per_Region), desc=f'Validating Region {self.env.Curriculum_manager.current_Region}'):
             obs, _ = self.env.reset()
             done = False
             truncated = False
@@ -90,11 +90,11 @@ class ModelValidator:
             'trajectory_efficiency': avg_trajectory_efficiency
         }
     
-    def validate_all_uocs(self):
-        max_uoc = self.env.Curriculum_manager.max_uoc
+    def validate_all_Regions(self):
+        max_Region = self.env.Curriculum_manager.max_Region
         
-        for Region in range(1, max_uoc + 1):
-            self.validate_uoc(Region)
+        for Region in range(1, max_Region + 1):
+            self.validate_Region(Region)
             
         return pd.DataFrame(self.results)
     
@@ -123,7 +123,7 @@ class ModelValidator:
         plt.savefig(f'{output_dir}/validation_metrics_{timestamp}.png')
         plt.close()
 
-def validate_all_models(base_dir='models', num_episodes_per_uoc=100):
+def validate_all_models(base_dir='models', num_episodes_per_Region=100):
     all_results = []
     exp_folders = glob.glob(os.path.join(base_dir, 'Ex(*)/'))
     
@@ -134,8 +134,8 @@ def validate_all_models(base_dir='models', num_episodes_per_uoc=100):
             print(f"\nValidating model: {model_path}")
             
             try:
-                validator = ModelValidator(model_path, num_episodes_per_uoc)
-                results_df = validator.validate_all_uocs()
+                validator = ModelValidator(model_path, num_episodes_per_Region)
+                results_df = validator.validate_all_Regions()
                 
                 results_df['experiment'] = os.path.basename(os.path.dirname(model_path))
                 results_df['model_name'] = os.path.basename(model_path)
@@ -164,7 +164,14 @@ def validate_all_models(base_dir='models', num_episodes_per_uoc=100):
 
 if __name__ == "__main__":
     DETERMINISTIC = True
-    results = validate_all_models(num_episodes_per_uoc=NUM_OF_EPISODE)
+    results = validate_all_models(num_episodes_per_Region=NUM_OF_EPISODE)
+    
+    if results is not None:
+        print("\nCombined Validation Results Summary:")
+        print(results.to_string(index=False))
+
+    DETERMINISTIC = False
+    results = validate_all_models(num_episodes_per_Region=NUM_OF_EPISODE)
     
     if results is not None:
         print("\nCombined Validation Results Summary:")
