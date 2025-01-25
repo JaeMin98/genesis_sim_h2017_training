@@ -266,7 +266,8 @@ def train_genesis(
     gradient_steps=8,
     save_freq=1000,
     device="auto",
-    random_name=None
+    random_name=None,
+    ent_coef="auto"
 ):
     """Genesis Simulator 훈련 함수"""
     if random_name is None:
@@ -287,7 +288,7 @@ def train_genesis(
         "train_freq": train_freq,
         "gradient_steps": gradient_steps,
         "net_arch": [64, 64],
-        "device": device
+        "device": device,
     }
 
     # wandb 초기화
@@ -317,6 +318,7 @@ def train_genesis(
             policy_kwargs={"net_arch": [64, 64]},
             device=device,
             verbose=2,  # 기본 로깅 비활성화
+            ent_coef="auto",
         )
     else:
         raise ValueError(f"Unknown algorithm: {algorithm}")
@@ -369,9 +371,9 @@ if __name__ == "__main__":
         "total_timesteps": 30_000_000,
         "seed": 42,
         "num_envs": 1,
-        "learning_rate": 0.0003,
+        "learning_rate": 0.00015,
         "batch_size": 1024,
-        "gamma": 0.9,
+        "gamma": 0.99,
         "buffer_size": 30_000_000,
         "learning_starts": 4096,
         "train_freq": 10,
