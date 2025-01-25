@@ -266,7 +266,8 @@ def train_genesis(
     random_name=None,
     UoC_dir = None,
     UoC_name = None,
-    env = None
+    env = None,
+    ent_coef="auto"
 ):
     UoC_path = os.path.join(UoC_dir, f"{UoC_name}.csv")
     if (env == None):
@@ -325,6 +326,7 @@ def train_genesis(
             gradient_steps=gradient_steps,
             policy_kwargs={"net_arch": [64, 64]},
             device=device,
+            ent_coef="auto",
             verbose=2,  # 기본 로깅 비활성화
         )
     else:
@@ -370,7 +372,7 @@ def train_genesis(
 if __name__ == "__main__":
 
     env = None
-    learning_UoCs = [1,2,3,4]
+    learning_UoCs = [5,6,7,8]
 
     for learning_UoC in learning_UoCs:
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -384,7 +386,7 @@ if __name__ == "__main__":
             "num_envs": 1,
             "learning_rate": 0.00056234,
             "batch_size": 1024,
-            "gamma": 0.97,
+            "gamma": 0.99,
             "buffer_size": 30_000_000,
             "learning_starts": 2048,
             "train_freq": 10,
