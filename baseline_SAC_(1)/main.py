@@ -348,7 +348,7 @@ def train_genesis(
         model.save(final_model_path)
         
         # 최종 모델을 W&B에 업로드
-        artifact = wandb.Artifact(name=f"{random_name}_final", type="model")
+        artifact = wandb.Artifact(name=f"{random_name}_{gamma}_{learning_rate}_final", type="model")
         artifact.add_file(final_model_path)
         run.log_artifact(artifact)
 
