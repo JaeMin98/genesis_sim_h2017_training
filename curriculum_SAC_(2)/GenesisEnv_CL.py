@@ -531,6 +531,7 @@ class CurriculumManager:
         ]
 
     def select_target_with_replay(self) -> None:
+        print(self.config.REPLAY_RATIO)
         """Select target with replay mechanism for previous UoCs"""
         if random.random() > self.config.REPLAY_RATIO:
             self.selected_uoc = self.current_uoc

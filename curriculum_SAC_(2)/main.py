@@ -443,6 +443,7 @@ def train_genesis(
             gradient_steps=gradient_steps,
             policy_kwargs={"net_arch": [64, 64]},
             device=device,
+            ent_coef="auto",
             verbose=2,  # 기본 로깅 비활성화
         )
     else:
@@ -471,11 +472,11 @@ def train_genesis(
     
     finally:
         # 최종 모델 저장
-        final_model_path = os.path.join(save_path, f"{random_name}_final.zip")
+        final_model_path = os.path.join(save_path, f"{REPLAY_RATIO}_{random_name}_{gamma}_{learning_rate}_final.zip")
         model.save(final_model_path)
         
         # 최종 모델을 W&B에 업로드
-        artifact = wandb.Artifact(name=f"{random_name}_final", type="model")
+        artifact = wandb.Artifact(name=f"{REPLAY_RATIO}_{random_name}_{gamma}_{learning_rate}_final", type="model")
         artifact.add_file(final_model_path)
         run.log_artifact(artifact)
 
@@ -496,9 +497,9 @@ if __name__ == "__main__":
         "total_timesteps": 30_000_000,
         "seed": 42,
         "num_envs": 1,
-        "learning_rate": 0.00015,
+        "learning_rate": 0.0003,
         "batch_size": 1024,
-        "gamma": 0.97,
+        "gamma": 0.99,
         "buffer_size": 30_000_000,
         "learning_starts": 2048,
         "train_freq": 10,
