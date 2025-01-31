@@ -1,0 +1,20 @@
+import torch
+
+# 하이퍼 파라미터 설정
+ALGORITHM = "SAC"
+TOTAL_TIMESTEPS = 30_000_000
+SEED = 42
+NUM_ENVS = 1
+LEARNING_RATE = 0.0003
+BATCH_SIZE = 1024
+GAMMA = 0.99
+BUFFER_SIZE = 30_000_000
+LEARNING_STARTS = 4096
+TRAIN_FREQ = 10
+GRADIENT_STEPS = 8
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+ENT_COEF = "auto"
+SAVE_FREQ = 1000
+REPLAY_RATIO = 0.5
+
+print(f"Using device: {DEVICE}")
