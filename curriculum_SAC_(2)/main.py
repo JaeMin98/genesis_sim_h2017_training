@@ -374,7 +374,7 @@ class CustomLoggingCallback(BaseCallback):
 
 Is_Genesis_initialized = False
 env = Genesis_Simulator(render=False)
-REPLAY_RATIO = 0.5
+REPLAY_RATIO = 0.7
 env.Curriculum_manager.config.REPLAY_RATIO = REPLAY_RATIO
 env = Monitor(env)
 
@@ -497,9 +497,9 @@ if __name__ == "__main__":
         "total_timesteps": 30_000_000,
         "seed": 42,
         "num_envs": 1,
-        "learning_rate": 0.0003,
+        "learning_rate": 0.0004,
         "batch_size": 1024,
-        "gamma": 0.99,
+        "gamma": 0.97,
         "buffer_size": 30_000_000,
         "learning_starts": 2048,
         "train_freq": 10,
