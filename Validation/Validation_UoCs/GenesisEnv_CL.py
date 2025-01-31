@@ -398,7 +398,7 @@ class CurriculumConfig:
 
 class CurriculumManager:
 
-    def __init__(self, csv_path: str = "./Preprocessing_datas/2025-01-20_22-11-34/data") -> None:
+    def __init__(self, csv_path: str = "./Preprocessing_datas/8000points_curriculum/data") -> None:
         self.csv_path = Path(csv_path)
         self.config = CurriculumConfig()
         self._initialize_curriculum_state()

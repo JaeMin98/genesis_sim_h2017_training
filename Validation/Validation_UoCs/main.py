@@ -97,34 +97,8 @@ class ModelValidator:
             self.validate_uoc(uoc)
             
         return pd.DataFrame(self.results)
-    
-    def save_results(self, output_dir='validation_results'):
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        os.makedirs(output_dir, exist_ok=True)
-        
-        results_df = pd.DataFrame(self.results)
-        results_df.to_csv(f'{output_dir}/validation_results_{timestamp}.csv', index=False)
-        
-        self._create_visualizations(output_dir, timestamp)
-        
-    def _create_visualizations(self, output_dir, timestamp):
-        metrics = ['success_rate', 'avg_episode_length', 'avg_distance', 'trajectory_efficiency']
-        fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-        axes = axes.flatten()
-        
-        for idx, metric in enumerate(metrics):
-            axes[idx].bar(self.results['uoc'], self.results[metric])
-            axes[idx].set_title(f'{metric.replace("_", " ").title()} by UoC')
-            axes[idx].set_xlabel('UoC')
-            axes[idx].set_ylabel(metric.replace('_', ' ').title())
-            axes[idx].grid(True)
-        
-        plt.tight_layout()
-        plt.savefig(f'{output_dir}/validation_metrics_{timestamp}.png')
-        plt.close()
 
 def validate_all_models(base_dir='models', num_episodes_per_uoc=100):
-    all_results = []
     exp_folders = glob.glob(os.path.join(base_dir, 'Ex(*)/'))
     
     for exp_folder in exp_folders:
@@ -139,28 +113,23 @@ def validate_all_models(base_dir='models', num_episodes_per_uoc=100):
                 
                 results_df['experiment'] = os.path.basename(os.path.dirname(model_path))
                 results_df['model_name'] = os.path.basename(model_path)
+                validation_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                results_df['validation_timestamp'] = validation_timestamp
                 
-                all_results.append(results_df)
+                output_dir = 'validation_results'
+                os.makedirs(output_dir, exist_ok=True)
+                output_path = os.path.join(
+                    output_dir,
+                    f'results_deterministic_{DETERMINISTIC}_episode_{NUM_OF_EPISODE}.csv'
+                )
+                file_exists = os.path.isfile(output_path)
+                results_df.to_csv(output_path, mode='a', index=False, header=not file_exists)
                 
             except Exception as e:
                 print(f"Error validating {model_path}: {str(e)}")
                 continue
     
-    if all_results:
-        combined_results = pd.concat(all_results, ignore_index=True)
-        
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        output_dir = 'validation_results'
-        os.makedirs(output_dir, exist_ok=True)
-        global DETERMINISTIC, NUM_OF_EPISODE
-        output_path = os.path.join(output_dir, f'results_deterministic_{DETERMINISTIC}_episode_{NUM_OF_EPISODE}_{timestamp}.csv')
-        combined_results.to_csv(output_path, index=False)
-        
-        print(f"\nAll validation results saved to: {output_path}")
-        return combined_results
-    else:
-        print("No validation results were generated.")
-        return None
+    return None
 
 if __name__ == "__main__":
     DETERMINISTIC = True
