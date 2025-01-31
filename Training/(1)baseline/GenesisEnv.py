@@ -8,6 +8,13 @@ import numpy as np
 import pandas as pd
 import genesis as gs
 
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from configs.config import (
+    GOAL_ALLOWABLE_ERROR, ACTION_WEIGHT, RD_WEIGHT, RP_WEIGHT, RE_WEIGHT, RS_WEIGHT
+)
+
 class Genesis_Simulator(gym.Env):
     """
     리스트 기반의 단일 환경 Genesis 시뮬레이터 환경 클래스
@@ -77,13 +84,13 @@ class Genesis_Simulator(gym.Env):
         self.target_file_data = df.values.tolist()
         self.target = [0.0] * len(self.target_file_data[0])
 
-        self.goal_allowable_error = 0.03
-        self.action_weight = 0.3
+        self.goal_allowable_error = GOAL_ALLOWABLE_ERROR
+        self.action_weight = ACTION_WEIGHT
         
-        self.Rd_weight = -1.0 #distance_reward
-        self.Rp_weight = 2.0 #progress_reward
-        self.Re_weight = -0.05 #efficiency_reward
-        self.Rs_weight = 30 #success_reward
+        self.Rd_weight = RD_WEIGHT  # distance_reward
+        self.Rp_weight = RP_WEIGHT  # progress_reward
+        self.Re_weight = RE_WEIGHT  # efficiency_reward
+        self.Rs_weight = RS_WEIGHT  # success_reward
 
     def close(self):
         gs.destroy()
