@@ -374,7 +374,7 @@ class CustomLoggingCallback(BaseCallback):
 
 Is_Genesis_initialized = False
 env = Genesis_Simulator(render=False)
-REPLAY_RATIO = 0.7
+REPLAY_RATIO = 0.3
 env.Curriculum_manager.config.REPLAY_RATIO = REPLAY_RATIO
 env = Monitor(env)
 
@@ -416,11 +416,11 @@ def train_genesis(
         "net_arch": [64, 64],
         "device": device
     }
-
+    
     # wandb 초기화
     run = wandb.init(
         project="genesis-robot-cl",
-        name=str(REPLAY_RATIO) + random_name,
+        name=f"{REPLAY_RATIO}_{random_name}_{gamma}_{learning_rate}",
         config=config,
         monitor_gym=True,
         save_code=True,
@@ -497,7 +497,7 @@ if __name__ == "__main__":
         "total_timesteps": 30_000_000,
         "seed": 42,
         "num_envs": 1,
-        "learning_rate": 0.0004,
+        "learning_rate": 0.00045,
         "batch_size": 1024,
         "gamma": 0.97,
         "buffer_size": 30_000_000,
