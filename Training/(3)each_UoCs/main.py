@@ -310,7 +310,7 @@ def train_genesis(
     # wandb 초기화
     run = wandb.init(
         project="(3)each_UoCs",
-        name=f"{random_name}_{gamma}_{learning_rate}",
+        name=f"{random_name}_{gamma}_{learning_rate}_{END_SUCCESS_RATE}",
         config=config,
         monitor_gym=True,
         save_code=True,
@@ -361,11 +361,11 @@ def train_genesis(
     
     finally:
         # 최종 모델 저장
-        final_model_path = os.path.join(save_path, f"{gamma}_{learning_rate}_{random_name}_final.zip")
+        final_model_path = os.path.join(save_path, f"{gamma}_{learning_rate}_{random_name}_{END_SUCCESS_RATE}_final.zip")
         model.save(final_model_path)
         
         # 최종 모델을 W&B에 업로드
-        artifact = wandb.Artifact(name=f"{gamma}_{learning_rate}_{random_name}_final", type="model")
+        artifact = wandb.Artifact(name=f"{gamma}_{learning_rate}_{random_name}_{END_SUCCESS_RATE}_final", type="model")
         artifact.add_file(final_model_path)
         run.log_artifact(artifact)
 
