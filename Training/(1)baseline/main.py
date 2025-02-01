@@ -16,7 +16,7 @@ from configs.utils import get_random_name
 from configs.config import (
     ALGORITHM, TOTAL_TIMESTEPS, SEED, NUM_ENVS, LEARNING_RATE, BATCH_SIZE, 
     GAMMA, BUFFER_SIZE, LEARNING_STARTS, TRAIN_FREQ, 
-    GRADIENT_STEPS, DEVICE, ENT_COEF, SAVE_FREQ
+    GRADIENT_STEPS, DEVICE, ENT_COEF, SAVE_FREQ, END_SUCCESS_RATE
 )
 
 from GenesisEnv import Genesis_Simulator
@@ -247,7 +247,7 @@ class CustomLoggingCallback(BaseCallback):
                 if self.episode_count % self.save_freq == 0:
                     self._save_model()
                 
-                if overall_success_rate >= 100:
+                if overall_success_rate >= END_SUCCESS_RATE:
                     raise SystemExit(0)
                 
                 # 다음 에피소드를 위한 초기화

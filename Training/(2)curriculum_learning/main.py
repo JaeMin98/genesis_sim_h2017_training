@@ -16,7 +16,7 @@ from configs.utils import get_random_name
 from configs.config import (
     ALGORITHM, TOTAL_TIMESTEPS, SEED, NUM_ENVS, LEARNING_RATE, BATCH_SIZE, 
     GAMMA, BUFFER_SIZE, LEARNING_STARTS, TRAIN_FREQ, 
-    GRADIENT_STEPS, DEVICE, ENT_COEF, SAVE_FREQ, REPLAY_RATIO
+    GRADIENT_STEPS, DEVICE, ENT_COEF, SAVE_FREQ, REPLAY_RATIO, END_SUCCESS_RATE
 )
 
 from GenesisEnv_CL import Genesis_Simulator
@@ -383,7 +383,6 @@ class CustomLoggingCallback(BaseCallback):
 
 Is_Genesis_initialized = False
 env = Genesis_Simulator(render=False)
-env.Curriculum_manager.config.REPLAY_RATIO = REPLAY_RATIO
 env = Monitor(env)
 
 def train_genesis(
