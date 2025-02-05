@@ -21,7 +21,7 @@ class HyperParameterRanges:
                  # 공통 파라미터 범위
                  lr_range=(1e-6, 1e-2),
                  batch_size_options=[1024, 2048, 4096, 8192],
-                 gamma_range=(0.8, 0.9999),
+                 gamma_range=(0.95, 0.9999),
                  total_timesteps=30000,
                  # 네트워크 구조 옵션
                  net_arch_options=[[64, 64]]):
@@ -275,7 +275,7 @@ if __name__ == "__main__":
         # 하이퍼파라미터 범위 설정
         param_ranges = HyperParameterRanges(
             # 공통 파라미터
-            lr_range=(1e-5, 1e-3),                    # 학습률 범위
+            lr_range=(1e-6, 1e-2),                    # 학습률 범위
             batch_size_options=[1024, 2048, 4096, 8192],    # 배치 크기 옵션
             gamma_range=(0.95, 0.999),                # 감마값 범위
             total_timesteps=50000,                    # 1회당 타임스텝
