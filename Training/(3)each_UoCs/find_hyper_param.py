@@ -10,8 +10,10 @@ import json
 from collections import defaultdict
 from tqdm import tqdm
 import torch
-
 import main
+
+LEARNING_UOC = 1
+ENV = None
 
 class HyperParameterRanges:
     """하이퍼파라미터 범위 정의 클래스"""
@@ -59,12 +61,12 @@ class ExperimentTracker:
         """결과를 CSV 파일로 저장"""
         if self.results:
             df = pd.DataFrame(self.results)
-            csv_path = os.path.join(self.results_dir, "optimization_results.csv")
+            csv_path = os.path.join(self.results_dir, f"optimization_results_{LEARNING_UOC}.csv")
             df.to_csv(csv_path, index=False)
         
     def save_best_trial(self, best_trial: Dict):
         """최적의 trial 결과를 별도 파일로 저장"""
-        best_params_path = os.path.join(self.results_dir, "best_parameters.json")
+        best_params_path = os.path.join(self.results_dir, f"best_parameters_{LEARNING_UOC}.json")
         with open(best_params_path, 'w') as f:
             json.dump(best_trial, f, indent=4)
             
@@ -110,6 +112,7 @@ def evaluate_model(model, env, n_eval_episodes: int = 10) -> Dict[str, float]:
 
 def get_algorithm_params(trial: optuna.Trial, algorithm: str, param_ranges: HyperParameterRanges) -> Dict[str, Any]:
     """알고리즘별 하이퍼파라미터 생성"""
+    global LEARNING_UOC, ENV
     params = {
         "algorithm": algorithm,
         "total_timesteps": param_ranges.total_timesteps,
@@ -118,20 +121,27 @@ def get_algorithm_params(trial: optuna.Trial, algorithm: str, param_ranges: Hype
         "learning_rate": trial.suggest_loguniform("learning_rate", *param_ranges.lr_range),
         "batch_size": trial.suggest_categorical("batch_size", param_ranges.batch_size_options),
         "gamma": trial.suggest_uniform("gamma", *param_ranges.gamma_range),
-        "device": "cuda" if torch.cuda.is_available() else "cpu"
+        "device": "cuda" if torch.cuda.is_available() else "cpu",
+        "ent_coef": "auto",
+        "save_freq": 1000000,
+        "UoC_dir" : "configs/learning_contents/8000points_curriculum/data",
+        "UoC_name" : f"UoC_{LEARNING_UOC}",
+        "env" : ENV,
     }
     return params
 
+
 def objective(trial: optuna.Trial, tracker: ExperimentTracker, param_ranges: HyperParameterRanges) -> float:
     """Optuna objective function for hyperparameter optimization"""
-    
+    global ENV
+
     # 알고리즘 선택
     algorithm = trial.suggest_categorical("algorithm", ["SAC"])
-    
-    # 알고리즘별 하이퍼파라미터 설정
-    hyperparameters = get_algorithm_params(trial, algorithm, param_ranges)
 
     try:
+        # 알고리즘별 하이퍼파라미터 설정
+        hyperparameters = get_algorithm_params(trial, algorithm, param_ranges)
+
         # 모델 학습
         start_time = datetime.now()
         model, env = main.train_genesis(**hyperparameters)
@@ -139,7 +149,8 @@ def objective(trial: optuna.Trial, tracker: ExperimentTracker, param_ranges: Hyp
         
         # 모델 평가
         eval_metrics = evaluate_model(model, env)
-        
+        ENV = env
+
         # 모든 메트릭 결합
         metrics = {
             "training_time": training_time,
@@ -257,26 +268,24 @@ def optimize_hyperparameters(
 if __name__ == "__main__":
     print("\n=== Genesis Robot Hyperparameter Optimization ===")
     print("Starting optimization process...")
-    
-    # 하이퍼파라미터 범위 설정
-    param_ranges = HyperParameterRanges(
-        # 공통 파라미터
-        lr_range=(1e-5, 1e-3),                    # 학습률 범위
-        batch_size_options=[1024, 2048, 4096],    # 배치 크기 옵션
-        gamma_range=(0.95, 0.995),                # 감마값 범위
-        total_timesteps=100000,                    # 1회당 타임스텝
-        
-        # 네트워크 구조 옵션
-        net_arch_options=[
-            [64, 64],
-            [128, 128],
-            [256, 256],
-            [64, 32],
-            [32, 32]
-        ]
-    )
-    
-    try:
+
+    for i in range(8):    
+        LEARNING_UOC = i+1
+
+        # 하이퍼파라미터 범위 설정
+        param_ranges = HyperParameterRanges(
+            # 공통 파라미터
+            lr_range=(1e-5, 1e-3),                    # 학습률 범위
+            batch_size_options=[1024, 2048, 4096, 8192],    # 배치 크기 옵션
+            gamma_range=(0.95, 0.999),                # 감마값 범위
+            total_timesteps=50000,                    # 1회당 타임스텝
+            
+            # 네트워크 구조 옵션
+            net_arch_options=[
+                [64, 64]
+            ]
+        )
+
         # 최적화 실행
         best_params = optimize_hyperparameters(
             param_ranges=param_ranges,
@@ -289,22 +298,4 @@ if __name__ == "__main__":
         print("Best parameters found:")
         for key, value in best_params.items():
             print(f"  {key}: {value}")
-            
-        # 최적의 하이퍼파라미터로 최종 모델 학습
-        final_model, final_env = main.train_genesis(**best_params)
-        
-        # 최종 모델 평가
-        print("\n=== Evaluating Final Model ===")
-        final_metrics = evaluate_model(final_model, final_env, n_eval_episodes=20)
-        
-        print("\nFinal Model Performance:")
-        print(f"Mean Reward: {final_metrics['mean_reward']:.2f} ± {final_metrics['std_reward']:.2f}")
-        print(f"Success Rate: {final_metrics['success_rate']:.2%}")
-        print(f"Average Episode Length: {final_metrics['mean_episode_length']:.1f}")
-        
-    except KeyboardInterrupt:
-        print("\nOptimization interrupted by user")
-    except Exception as e:
-        print(f"\nOptimization failed with error: {e}")
-    finally:
-        print("\nOptimization process completed")
+    

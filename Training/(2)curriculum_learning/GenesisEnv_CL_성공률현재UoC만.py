@@ -483,14 +483,9 @@ class CurriculumManager:
 
     def get_success_rate(self, uoc: int) -> float:
         """Get the success rate for a specific UoC"""
-
-        history = []
-        for i in range(self.min_uoc, self.max_uoc+1):
-            history += self.success_history[i]
-
-            if not history:
-                return 0.0
-        
+        history = self.success_history[uoc]
+        if not history:
+            return 0.0
         return sum(history) / len(history)
 
     def get_all_uocs_success_rate(self) -> list:
