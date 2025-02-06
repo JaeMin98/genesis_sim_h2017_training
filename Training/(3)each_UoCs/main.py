@@ -19,6 +19,7 @@ from configs.config import (
     GAMMA, BUFFER_SIZE, LEARNING_STARTS, TRAIN_FREQ, 
     GRADIENT_STEPS, DEVICE, ENT_COEF, SAVE_FREQ, END_SUCCESS_RATE
 )
+IF_END_SUCCESS_RATE = True
 
 from GenesisEnv import Genesis_Simulator
 
@@ -249,7 +250,8 @@ class CustomLoggingCallback(BaseCallback):
                     self._save_model()
                 
                 if overall_success_rate >= END_SUCCESS_RATE:
-                    raise Exception("Done")
+                    if(IF_END_SUCCESS_RATE):
+                        raise Exception("Done")
                 
                 # 다음 에피소드를 위한 초기화
                 self.current_episode_reward = 0
@@ -378,6 +380,7 @@ def train_genesis(
 
 if __name__ == "__main__":
     import json 
+    IF_END_SUCCESS_RATE = False
 
     env = None
     learning_UoCs = [1,2,3,4,5,6,7,8]
