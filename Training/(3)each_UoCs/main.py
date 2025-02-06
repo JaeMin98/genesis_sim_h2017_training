@@ -377,20 +377,29 @@ def train_genesis(
 
 
 if __name__ == "__main__":
+    import json 
 
     env = None
-    learning_UoCs = [6]
+    learning_UoCs = [1,2,3,4,5,6,7,8]
 
     for learning_UoC in learning_UoCs:
+        json_file_path = f'configs/optimize_result/best_parameters_{learning_UoC}.json'
+
+        with open(json_file_path, 'r') as file:
+            data = json.load(file)
+
+        BEST_LEARNING_RATE = data.get('learning_rate')
+        BEST_BATCH_SIZE = data.get('batch_size')
+        BEST_GAMMA = data.get('gamma')
 
         config = {
             "algorithm": ALGORITHM,
             "total_timesteps": TOTAL_TIMESTEPS,
             "seed": SEED,
             "num_envs": NUM_ENVS,
-            "learning_rate": LEARNING_RATE,
-            "batch_size": BATCH_SIZE,
-            "gamma": GAMMA,
+            "learning_rate": BEST_LEARNING_RATE,
+            "batch_size": BEST_BATCH_SIZE,
+            "gamma": BEST_GAMMA,
             "buffer_size": BUFFER_SIZE,
             "learning_starts": LEARNING_STARTS,
             "train_freq": TRAIN_FREQ,
