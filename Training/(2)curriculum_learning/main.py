@@ -511,5 +511,6 @@ if __name__ == "__main__":
         "save_freq": SAVE_FREQ
     }
     
+    
     # 모델 학습
     model, env = train_genesis(**config)
