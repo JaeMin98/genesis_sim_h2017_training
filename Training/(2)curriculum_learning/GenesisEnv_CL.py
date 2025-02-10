@@ -488,10 +488,10 @@ class CurriculumManager:
         for i in range(self.min_uoc, self.max_uoc+1):
             history += self.success_history[i]
 
-            if not history:
-                return 0.0
-        
-        return sum(history) / len(history)
+        try:
+            return sum(history) / len(history)
+        except :
+            return 0.0
 
     def get_all_uocs_success_rate(self) -> list:
         all_uocs_success_rate = []
