@@ -391,14 +391,14 @@ from collections import defaultdict, deque
 @dataclass
 class CurriculumConfig:
     """Configuration settings for curriculum management"""
-    REPLAY_RATIO: float = 0.5
+    REPLAY_RATIO: float = 0.2
     SUCCESS_THRESHOLD: float = 1.0
     HISTORY_WINDOW_SIZE: int = 100  # Number of recent entries to consider for success rate
     EXIT_ON_SUCCESS: bool = True
 
 class CurriculumManager:
 
-    def __init__(self, csv_path: str = "./Curriculum_builder/Uoc_data/2025-01-20_22-11-34/data") -> None:
+    def __init__(self, csv_path: str = "./Preprocessing_datas/8000points_curriculum/data") -> None:
         self.csv_path = Path(csv_path)
         self.config = CurriculumConfig()
         self._initialize_curriculum_state()
@@ -531,7 +531,6 @@ class CurriculumManager:
         ]
 
     def select_target_with_replay(self) -> None:
-        print(self.config.REPLAY_RATIO)
         """Select target with replay mechanism for previous UoCs"""
         if random.random() > self.config.REPLAY_RATIO:
             self.selected_uoc = self.current_uoc
