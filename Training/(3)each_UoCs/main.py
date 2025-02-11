@@ -383,33 +383,20 @@ if __name__ == "__main__":
     IF_END_SUCCESS_RATE = False
 
     env = None
-    learning_UoCs = [1,2, 3,6]
-    # learning_UoCs = [3,4, 5,8]
-    # learning_UoCs = [5,6, 2,7]
-    # learning_UoCs = [7,8, 1,4]
-
+    learning_UoCs = [2, 4, 5]
+    # learning_UoCs = [6, 7, 8]
 
     for learning_UoC in learning_UoCs:
-        json_file_path = f'configs/optimize_result/best_parameters_{learning_UoC}.json'
 
-        with open(json_file_path, 'r') as file:
-            data = json.load(file)
-
-        BEST_LEARNING_RATE = data.get('params').get('learning_rate')
-        BEST_BATCH_SIZE = data.get('params').get('batch_size')
-        BEST_GAMMA = data.get('params').get('gamma')
-
-        if(learning_UoC == 4 or learning_UoC == 6): TOTAL_TIMESTEPS = 15_000_000
-        else: TOTAL_TIMESTEPS = 10_000_000
 
         config = {
             "algorithm": ALGORITHM,
             "total_timesteps": TOTAL_TIMESTEPS,
             "seed": SEED,
             "num_envs": NUM_ENVS,
-            "learning_rate": BEST_LEARNING_RATE,
-            "batch_size": BEST_BATCH_SIZE,
-            "gamma": BEST_GAMMA,
+            "learning_rate": LEARNING_RATE,
+            "batch_size": BATCH_SIZE,
+            "gamma": GAMMA,
             "buffer_size": BUFFER_SIZE,
             "learning_starts": LEARNING_STARTS,
             "train_freq": TRAIN_FREQ,

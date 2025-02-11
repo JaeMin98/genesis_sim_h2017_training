@@ -2,7 +2,7 @@ import torch
 
 # 하이퍼 파라미터 설정
 ALGORITHM = "SAC"
-TOTAL_TIMESTEPS = 60_000_000
+TOTAL_TIMESTEPS = 90_000_000
 SEED = 42
 NUM_ENVS = 1
 LEARNING_RATE = 0.0003
@@ -10,8 +10,8 @@ BATCH_SIZE = 1024
 GAMMA = 0.99
 BUFFER_SIZE = TOTAL_TIMESTEPS
 LEARNING_STARTS = 4096
-TRAIN_FREQ = 10
-GRADIENT_STEPS = 8
+TRAIN_FREQ = 1
+GRADIENT_STEPS = 1
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using device: {DEVICE}")
 ENT_COEF = "auto"
