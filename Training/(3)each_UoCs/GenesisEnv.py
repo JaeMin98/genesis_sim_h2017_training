@@ -86,7 +86,7 @@ class Genesis_Simulator(gym.Env):
         self.target_file_data = df.values.tolist()
         self.target = [0.0] * len(self.target_file_data[0])
 
-        self.goal_allowable_error = GOAL_ALLOWABLE_ERROR/2
+        self.goal_allowable_error = GOAL_ALLOWABLE_ERROR
         self.action_weight = ACTION_WEIGHT
         
         self.Rd_weight = RD_WEIGHT  # distance_reward
